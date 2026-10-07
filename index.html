@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🌌 Revontulien Dashboard</title>
-<meta name="description" content="Reaaliaikainen revontuliennuste Suomeen. NOAA Kp, magnetometri, webcams.">
+<meta name="description" content="Reaaliaikainen revontuliennuste Suomeen. NOAA Kp, DSCOVR, magnetometri, webcams.">
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
 <style>
@@ -16,15 +16,20 @@
   .kp-unsettled { background: linear-gradient(135deg, #78350f 0%, #b45309 100%); }
   .kp-active { background: linear-gradient(135deg, #7c2d12 0%, #c2410c 100%); }
   .kp-storm { background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 100%); }
-  .pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+  .bz-north { background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); color: #dbeafe; }
+  .bz-south { background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 100%); color: white; }
+  .bz-zero { background: linear-gradient(135deg, #374151 0%, #4b5563 100%); color: #d1d5db; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+  .pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
   .loading-shimmer { background: linear-gradient(90deg, #1e293b 0%, #334155 50%, #1e293b 100%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
   @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
   .webcam-frame { aspect-ratio: 4/3; }
   .aurora-bg {
-    background-image: 
+    background-image:
       radial-gradient(circle at 20% 30%, rgba(34, 197, 94, 0.08) 0%, transparent 40%),
       radial-gradient(circle at 80% 70%, rgba(34, 197, 94, 0.05) 0%, transparent 40%);
+  }
+  .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite; }
   @media (prefers-color-scheme: light) {
     body { background: radial-gradient(ellipse at top, #f1f5f9 0%, #cbd5e1 100%); }
     .glass { background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(15, 23, 42, 0.1); }
@@ -34,7 +39,7 @@
 </head>
 <body class="text-slate-100 aurora-bg">
 
-<div x-data="dashboard()" x-init="init()" class="max-w-6xl mx-auto p-3 md:p-6 space-y-4 md:space-y-6">
+<div x-data="dashboard()" x-init="init()" class="max-w-7xl mx-auto p-3 md:p-6 space-y-4 md:space-y-6">
 
   <!-- Header -->
   <header class="pt-2 md:pt-4 text-center">
@@ -42,62 +47,84 @@
       🌌 Revontulien Dashboard
     </h1>
     <p class="text-slate-400 text-xs md:text-sm">
-      Reaaliaikainen tilanne Suomessa • Päivitetty: <span x-text="lastUpdate" class="font-mono"></span>
+      Reaaliaikainen tilanne Suomessa & Pohjoismaissa • Päivitetty: <span x-text="lastUpdate" class="font-mono"></span>
     </p>
     <div class="mt-2 flex flex-wrap justify-center gap-2 text-xs">
       <span class="glass-strong px-2 py-1 rounded">📡 NOAA SWPC</span>
       <span class="glass-strong px-2 py-1 rounded">🇫🇮 Ilmatieteen laitos</span>
-      <span class="glass-strong px-2 py-1 rounded">📸 PanoCloud</span>
-      <span class="glass-strong px-2 py-1 rounded">🧲 SGO Sodankylä</span>
+      <span class="glass-strong px-2 py-1 rounded">🇸🇪 IRF Kiruna</span>
+      <span class="glass-strong px-2 py-1 rounded">🇸🇪 Jokkmokk</span>
+      <span class="glass-strong px-2 py-1 rounded">🇳🇴 yr.no</span>
     </div>
   </header>
+
+  <!-- DSCOVR reaaliaikainen data -->
+  <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
+    <h2 class="text-lg md:text-xl font-semibold mb-3 flex items-center">
+      <span class="mr-2">🌞</span> DSCOVR — Avaruussää juuri nyt
+      <span class="ml-auto text-xs text-slate-500">↻ päivittyy 60s</span>
+    </h2>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3">
+      <div class="rounded-xl p-3 text-center transition-all duration-500" :class="bzClass">
+        <div class="text-xs uppercase opacity-80">Bz (IMF)</div>
+        <div class="text-2xl md:text-3xl font-black my-1" x-text="bzDisplay">—</div>
+        <div class="text-xs" x-text="bzDirection"></div>
+      </div>
+      <div class="rounded-xl p-3 text-center bg-slate-800">
+        <div class="text-xs uppercase opacity-60">Bt</div>
+        <div class="text-2xl md:text-3xl font-black my-1" x-text="btDisplay">—</div>
+        <div class="text-xs opacity-70">nT</div>
+      </div>
+      <div class="rounded-xl p-3 text-center bg-slate-800">
+        <div class="text-xs uppercase opacity-60">Nopeus</div>
+        <div class="text-2xl md:text-3xl font-black my-1" x-text="speedDisplay">—</div>
+        <div class="text-xs opacity-70">km/s</div>
+      </div>
+      <div class="rounded-xl p-3 text-center bg-slate-800">
+        <div class="text-xs uppercase opacity-60">Tiheys</div>
+        <div class="text-2xl md:text-3xl font-black my-1" x-text="densityDisplay">—</div>
+        <div class="text-xs opacity-70">p/cm³</div>
+      </div>
+      <div class="rounded-xl p-3 text-center bg-slate-800">
+        <div class="text-xs uppercase opacity-60">HP30</div>
+        <div class="text-2xl md:text-3xl font-black my-1" x-text="hpDisplay">—</div>
+        <div class="text-xs opacity-70">GW</div>
+      </div>
+    </div>
+    <div class="mt-3 text-xs text-slate-400 leading-relaxed">
+      💡 <strong>Bz</strong> (interplanetaarinen magneettikenttä): <strong>etelään = revontulia suosiva</strong>.
+      NOAA Kp on 3 tunnin keskiarvo — DSCOVR Bz näyttää reaaliaikaisen tilanteen.
+      <span x-show="bz <= -3" class="text-emerald-400 font-bold ml-2">⚡ Bz etelään → aktiivinen!</span>
+    </div>
+  </section>
 
   <!-- Hero: Kp + mahdollisuudet -->
   <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
     <div class="grid md:grid-cols-3 gap-4 md:gap-6">
-
-      <!-- Kp iso -->
       <div class="text-center md:border-r md:border-slate-700 md:pr-4">
         <div class="text-xs text-slate-400 uppercase tracking-widest">Kp-indeksi juuri nyt</div>
         <div :class="kpColorClass" class="text-6xl md:text-8xl font-black my-3 rounded-2xl p-3 md:p-4 shadow-2xl transition-all duration-500">
           <span x-text="kpDisplay" :class="kp === null ? 'loading-shimmer' : ''"></span>
         </div>
         <div class="text-base md:text-xl" x-text="kpStatusText"></div>
-        <div class="text-xs text-slate-500 mt-1">Päivittyy 60s välein</div>
+        <div class="text-xs text-slate-500 mt-1">3h keskiarvo NOAA</div>
       </div>
-
-      <!-- Mahdollisuudet Suomessa -->
       <div class="md:col-span-2">
         <h3 class="font-semibold text-sm md:text-base mb-3 text-slate-300">📍 Mahdollisuus nähdä revontulet juuri nyt</h3>
         <div class="space-y-2">
-          <div class="grid grid-cols-12 gap-2 items-center">
-            <div class="col-span-4 text-xs md:text-sm font-medium">Pohjois-Lappi</div>
-            <div class="col-span-2 text-xs text-slate-400">Utsjoki, Inari</div>
-            <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs" :class="chanceClass('lapland')" x-text="chanceText('lapland')"></div>
-          </div>
-          <div class="grid grid-cols-12 gap-2 items-center">
-            <div class="col-span-4 text-xs md:text-sm font-medium">Keski-Lappi</div>
-            <div class="col-span-2 text-xs text-slate-400">Sodankylä, Rovaniemi</div>
-            <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs" :class="chanceClass('midlapland')" x-text="chanceText('midlapland')"></div>
-          </div>
-          <div class="grid grid-cols-12 gap-2 items-center">
-            <div class="col-span-4 text-xs md:text-sm font-medium">Pohjanmaa / Oulu</div>
-            <div class="col-span-2 text-xs text-slate-400">Oulu, Kajaani</div>
-            <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs" :class="chanceClass('oulu')" x-text="chanceText('oulu')"></div>
-          </div>
-          <div class="grid grid-cols-12 gap-2 items-center">
-            <div class="col-span-4 text-xs md:text-sm font-medium">Keski-Suomi</div>
-            <div class="col-span-2 text-xs text-slate-400">Jyväskylä, Tampere</div>
-            <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs" :class="chanceClass('central')" x-text="chanceText('central')"></div>
-          </div>
-          <div class="grid grid-cols-12 gap-2 items-center">
-            <div class="col-span-4 text-xs md:text-sm font-medium">Etelä-Suomi</div>
-            <div class="col-span-2 text-xs text-slate-400">Helsinki, Turku</div>
-            <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs" :class="chanceClass('south')" x-text="chanceText('south')"></div>
-          </div>
+          <template x-for="region in regions" :key="region.id">
+            <div class="grid grid-cols-12 gap-2 items-center">
+              <div class="col-span-4 text-xs md:text-sm font-medium" x-text="region.name"></div>
+              <div class="col-span-2 text-xs text-slate-400" x-text="region.cities"></div>
+              <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs transition-all duration-500"
+                   :class="chanceClass(region.id)" x-text="chanceText(region.id)"></div>
+            </div>
+          </template>
+        </div>
+        <div class="mt-3 text-xs text-slate-500 italic">
+          Perustuu DSCOVR Bz:ään + NOAA Kp:hen. Korkeilla leveysasteilla (66°N+) tarvitaan Bz etelään lyhytaikaisestikin.
         </div>
       </div>
-
     </div>
   </section>
 
@@ -117,7 +144,7 @@
       </template>
     </div>
     <p class="text-xs text-slate-500 mt-3">
-      💡 Kp-indeksi kertoo geomagneettisen aktiivisuuden voimakkuuden. <strong>Kp 5+</strong> = revontulet näkyvät koko Suomessa.
+      💡 <strong>Perjantai 9.10.</strong> — G2 geomagneettinen myrskyennuste, mahdollisesti Kp 5-6 → näkyy koko maassa.
     </p>
   </section>
 
@@ -154,85 +181,119 @@
     </div>
   </section>
 
-  <!-- Webcams -->
+  <!-- LIVE WEB CAMERAS - TOIMIVILLA URL:ILLA -->
   <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
     <h2 class="text-lg md:text-xl font-semibold mb-3 flex items-center">
-      <span class="mr-2">📸</span> Live-kamerat juuri nyt
+      <span class="mr-2">📸</span> Live-kamerat Pohjoismaista juuri nyt
       <span class="ml-auto text-xs text-slate-500">↻ päivittyy 60s</span>
     </h2>
-    <div class="grid md:grid-cols-2 gap-3 md:gap-4">
-      <!-- Ruka Pessari Top -->
-      <div class="rounded-xl overflow-hidden border border-slate-700">
-        <div class="bg-slate-800 px-3 py-2 flex items-center justify-between">
+
+    <!-- Hero: Ruka Pessari Top -->
+    <div class="rounded-xl overflow-hidden border-2 border-emerald-700/50 mb-4 bg-slate-900">
+      <div class="bg-slate-800 px-3 py-2 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="live-dot"></span>
           <div>
             <div class="text-sm font-semibold">🥇 Ruka Pessari Top</div>
             <div class="text-xs text-slate-400">66.17°N, 29.15°E • 492m • Suomen paras revontulinäkymä</div>
           </div>
-          <a href="https://ruka3.panocloud.webcam" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
         </div>
-        <img :src="ruka3Url" @load="webcamStatus.ruka3='live'" @error="webcamStatus.ruka3='error'" class="w-full webcam-frame bg-slate-900" alt="Ruka Pessari Top">
-        <div class="bg-slate-800/60 px-3 py-1 text-xs flex items-center justify-between">
-          <span x-show="webcamStatus.ruka3==='live'" class="text-emerald-400">● LIVE</span>
-          <span x-show="webcamStatus.ruka3==='error'" class="text-red-400">● VIRHE</span>
-          <span x-show="webcamStatus.ruka3===null" class="text-slate-500">⏳ Ladataan...</span>
-          <a :href="'https://ruka3.panocloud.webcam/snapshot.jpg?t='+Date.now()" target="_blank" class="text-slate-400 hover:text-white">Avaa alkuperäinen →</a>
-        </div>
+        <a href="https://ruka3.panocloud.webcam" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ Alkuperäinen</a>
       </div>
+      <img :src="ruka3Url" class="w-full webcam-frame bg-slate-900" alt="Ruka Pessari Top">
+    </div>
 
-      <!-- Sodankylä SGO -->
+    <!-- Jokkmokk-kamerat (Ruotsin Lapin paras revontuliseuranta) -->
+    <h3 class="text-sm font-semibold text-slate-300 mb-2 mt-4">🇸🇪 Jokkmokk / Porjus, Ruotsin Lappi (66.95°N)</h3>
+    <div class="grid md:grid-cols-2 gap-3 md:gap-4 mb-4">
       <div class="rounded-xl overflow-hidden border border-slate-700">
-        <div class="bg-slate-800 px-3 py-2 flex items-center justify-between">
-          <div>
-            <div class="text-sm font-semibold">🧲 Sodankylä SGO</div>
-            <div class="text-xs text-slate-400">67.42°N, 26.39°E • Geofysiikan observatorio</div>
-          </div>
-          <a href="http://www.sgo.fi/Data/RealTime/" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
+        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
+          <div class="text-sm font-semibold">🌌 NR2 — Länsi/etelä (herkin)</div>
+          <a href="https://uk.jokkmokk.jp/detail_nr2.shtml" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
         </div>
-        <iframe src="http://www.sgo.fi/Data/RealTime/RealTimeImag.php" class="w-full webcam-frame bg-slate-900" frameborder="0"></iframe>
-        <div class="bg-slate-800/60 px-3 py-1 text-xs text-slate-400">
-          All-sky + magnetometri (X, Z) reaaliajassa
-        </div>
+        <img :src="jokkmokkNR2Url" class="w-full webcam-frame bg-slate-900" alt="Jokkmokk NR2">
       </div>
-
-      <!-- Hankasalmi -->
       <div class="rounded-xl overflow-hidden border border-slate-700">
-        <div class="bg-slate-800 px-3 py-2 flex items-center justify-between">
-          <div>
-            <div class="text-sm font-semibold">🔭 Hankasalmi</div>
-            <div class="text-xs text-slate-400">62.25°N, 26.60°E • Jyväskylän Sirius</div>
-          </div>
-          <a href="http://murtoinen.jklsirius.fi/" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
+        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
+          <div class="text-sm font-semibold">🔭 NRA — All-sky</div>
+          <a href="https://uk.jokkmokk.jp/detail_nra.shtml" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
         </div>
-        <img :src="hankasalmiUrl" @load="webcamStatus.hankasalmi='live'" @error="webcamStatus.hankasalmi='error'" class="w-full webcam-frame bg-slate-900" alt="Hankasalmi all-sky">
-        <div class="bg-slate-800/60 px-3 py-1 text-xs flex items-center">
-          <span x-show="webcamStatus.hankasalmi==='live'" class="text-emerald-400 mr-2">● LIVE</span>
-          <span x-show="webcamStatus.hankasalmi==='error'" class="text-red-400 mr-2">● VIRHE</span>
-          <span x-show="webcamStatus.hankasalmi===null" class="text-slate-500 mr-2">⏳ Ladataan...</span>
-          <span class="text-slate-400">Näkyy vain myrskyillä (G1+)</span>
-        </div>
+        <img :src="jokkmokkNRAUrl" class="w-full webcam-frame bg-slate-900" alt="Jokkmokk NRA">
       </div>
-
-      <!-- Lights Over Lapland Abisko -->
       <div class="rounded-xl overflow-hidden border border-slate-700">
-        <div class="bg-slate-800 px-3 py-2 flex items-center justify-between">
-          <div>
-            <div class="text-sm font-semibold">🇸🇪 Abisko / Lights Over Lapland</div>
-            <div class="text-xs text-slate-400">68.36°N, 18.78°E • Ruotsin paras revontulipaikka</div>
-          </div>
-          <a href="https://lightsoverlapland.com/aurora-webcam/" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
+        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
+          <div class="text-sm font-semibold">🏞️ NR3 — Järvinäkymä länteen</div>
+          <a href="https://uk.jokkmokk.jp/detail_nr3.shtml" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
         </div>
-        <iframe src="https://lightsoverlapland.com/aurora-webcam/" class="w-full webcam-frame bg-slate-900" frameborder="0"></iframe>
-        <div class="bg-slate-800/60 px-3 py-1 text-xs text-slate-400">
-          360° live panoraama
+        <img :src="jokkmokkNR3Url" class="w-full webcam-frame bg-slate-900" alt="Jokkmokk NR3">
+      </div>
+      <div class="rounded-xl overflow-hidden border border-slate-700">
+        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
+          <div class="text-sm font-semibold">🌅 NR5 — Itä (lämpötila + revontulet)</div>
+          <a href="https://uk.jokkmokk.jp/detail_nr5.shtml" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
         </div>
+        <img :src="jokkmokkNR5Url" class="w-full webcam-frame bg-slate-900" alt="Jokkmokk NR5">
       </div>
     </div>
 
-    <div class="mt-3 text-xs text-slate-400">
-      💡 Lisää kameroita: 
-      <a href="https://virmalised.ee/aurora-live-cameras/" target="_blank" class="text-emerald-400 hover:underline">virmalised.ee</a> • 
-      <a href="https://auroraholidays.net/northern-lights-live-stream-utsjoki/" target="_blank" class="text-emerald-400 hover:underline">Utsjoki</a> • 
-      <a href="https://glassresort.fi/northern-lights-camera-at-glass-resort-follow-the-aurora-in-real-time/" target="_blank" class="text-emerald-400 hover:underline">Rovaniemi Glass Resort</a>
+    <!-- YouTube live streamit -->
+    <h3 class="text-sm font-semibold text-slate-300 mb-2 mt-4">🎥 Live-streameja Pohjoismaista (YouTube)</h3>
+    <div class="grid md:grid-cols-2 gap-3 md:gap-4 mb-4">
+      <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
+        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
+          <div class="text-sm font-semibold">Abisko Live Cam 1</div>
+          <a href="https://www.youtube.com/watch?v=rKfecmmzzw0" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ YouTube</a>
+        </div>
+        <iframe src="https://www.youtube.com/embed/rKfecmmzzw0" class="w-full webcam-frame" frameborder="0" allowfullscreen></iframe>
+      </div>
+      <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
+        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
+          <div class="text-sm font-semibold">Abisko Live Cam 2</div>
+          <a href="https://www.youtube.com/watch?v=dyRSvHGGvA8" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ YouTube</a>
+        </div>
+        <iframe src="https://www.youtube.com/embed/dyRSvHGGvA8" class="w-full webcam-frame" frameborder="0" allowfullscreen></iframe>
+      </div>
+      <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
+        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
+          <div class="text-sm font-semibold">Pohjoinen Norja Live</div>
+          <a href="https://www.youtube.com/watch?v=dnlQtDad6Dk" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ YouTube</a>
+        </div>
+        <iframe src="https://www.youtube.com/embed/dnlQtDad6Dk" class="w-full webcam-frame" frameborder="0" allowfullscreen></iframe>
+      </div>
+      <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
+        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
+          <div class="text-sm font-semibold">🇮🇸 Islanti Live</div>
+          <a href="https://www.youtube.com/watch?v=ccTVAhJU5lg" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ YouTube</a>
+        </div>
+        <iframe src="https://www.youtube.com/embed/ccTVAhJU5lg" class="w-full webcam-frame" frameborder="0" allowfullscreen></iframe>
+      </div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-slate-300 mb-2 mt-4">🇳🇴 Norja — Yr.no & Setermoen</h3>
+    <div class="grid md:grid-cols-2 gap-3 md:gap-4">
+      <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
+        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
+          <div class="text-sm font-semibold">Setermoen (Troms) säädata</div>
+          <a href="https://www.yr.no/en/other-conditions/1-291747/Norway/Troms/Bardu/Setermoen" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ yr.no</a>
+        </div>
+        <div class="p-4 text-sm">
+          <div class="grid grid-cols-2 gap-2">
+            <div>📍 Sijainti</div><div class="font-mono">68.86°N, 18.35°E</div>
+            <div>🌡️ Lämpötila</div><div class="font-mono">+1.8°C</div>
+            <div>🌥️ Pilvisyys</div><div class="font-mono">97% (pilvistä)</div>
+            <div>📊 Kp-indeksi</div><div class="font-mono">3</div>
+            <div>🌌 Aurora</div><div class="font-mono text-emerald-400">Low activity (mutta live-kuvat näyttävät toisin!)</div>
+            <div>🌙 Kuu</div><div class="font-mono">9.3% (suosiollinen)</div>
+          </div>
+        </div>
+      </div>
+      <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
+        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
+          <div class="text-sm font-semibold">Abisko / Lights Over Lapland</div>
+          <a href="https://lightsoverlapland.com/aurora-webcam/" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
+        </div>
+        <iframe src="https://lightsoverlapland.com/aurora-webcam/" class="w-full webcam-frame" frameborder="0"></iframe>
+      </div>
     </div>
   </section>
 
@@ -243,20 +304,24 @@
     </h2>
     <div class="grid md:grid-cols-2 gap-x-6 gap-y-1 text-xs md:text-sm">
       <a href="https://www.ilmatieteenlaitos.fi/revontulet-ja-avaruussaa" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Ilmatieteen laitos — Revontulet ja avaruussää</a>
-      <a href="https://jemma.mobi/mittarit" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Jemma.mobi — Suomalainen mittari-sivu</a>
+      <a href="https://jemma.mobi/mittarit" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Jemma.mobi — DSCOVR + Kp</a>
       <a href="https://www.sgo.fi/" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 SGO Sodankylä — Geofysiikan observatorio</a>
       <a href="https://www.taivaanvahti.fi/observations/list/11573/" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Taivaanvahti — Revontulihavainnot</a>
+      <a href="http://www.ursa.fi/english.html" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Ursa — Tähtitieteellinen yhdistys</a>
+      <a href="https://uk.jokkmokk.jp/" target="_blank" class="hover:text-emerald-400 hover:underline">🇸🇪 Jokkmokk Porjus — Live revontulikamerat</a>
+      <a href="https://www.irf.se/" target="_blank" class="hover:text-emerald-400 hover:underline">🇸🇪 IRF Kiruna — Rymdfysik</a>
+      <a href="https://www.yr.no/en/other-conditions/1-291747/Norway/Troms/Bardu/Setermoen" target="_blank" class="hover:text-emerald-400 hover:underline">🇳🇴 Yr.no Setermoen — Sää ja aurora</a>
       <a href="https://www.spaceweatherlive.com/en/auroral-activity/aurora-forecast.html" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 SpaceWeatherLive — Kp-ennuste</a>
-      <a href="https://services.swpc.noaa.gov/products/aurora-30-minute-forecast" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA OVAAL — Revontuliennustekartta</a>
       <a href="https://services.swpc.noaa.gov/json/planetary_k_index_1m.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA Kp-data (JSON)</a>
-      <a href="https://services.swpc.noaa.gov/products/summary/10cm-flux.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA 10cm flux (auringon aktiivisuus)</a>
+      <a href="https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA DSCOVR IMF (JSON)</a>
+      <a href="https://services.swpc.noaa.gov/products/noaa-scales.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA R/S/G-asteikot</a>
     </div>
   </section>
 
   <!-- Footer -->
   <footer class="text-center text-slate-500 text-xs py-4">
-    <div>Tietolähteet: NOAA SWPC, Ilmatieteen laitos, SGO Sodankylä, PanoCloud</div>
-    <div class="mt-1">Päivittyy automaattisesti 60s välein • Ei tallenna käyttäjädataa</div>
+    <div>Tietolähteet: SWPC · Jemma.mobi · IRF Kiruna · Jokkmokk · yr.no · SGO Sodankylä</div>
+    <div class="mt-1">Päivittyy automaattisesti 60s välein • Ei tallenna käyttäjädataa • v2.0 — korjattu kamerat</div>
   </footer>
 
 </div>
@@ -264,7 +329,7 @@
 <script>
 function dashboard() {
   return {
-    // Tila
+    // Kp + perusdata
     kp: null,
     kpDisplay: '—',
     kpStatusText: 'Ladataan...',
@@ -275,18 +340,51 @@ function dashboard() {
       { label: '+24h', kp: null, time: '' }
     ],
     noaaScale: { R: '—', S: '—', G: '—' },
-    webcamStatus: { ruka3: null, hankasalmi: null },
     lastUpdate: '—',
-    
-    // Computed URLs (päivittyvät)
-    get ruka3Url() {
-      return `https://ruka3.panocloud.webcam/raw_panorama1.tiles/preview.jpg?t=${Date.now()}`;
+
+    // DSCOVR data
+    bz: null,
+    bt: null,
+    speed: null,
+    density: null,
+    hp: null,
+
+    // Alueet
+    regions: [
+      { id: 'lapland', name: 'Pohjois-Lappi', cities: 'Utsjoki, Inari', threshold: 1 },
+      { id: 'midlapland', name: 'Keski-Lappi', cities: 'Sodankylä, Rovaniemi', threshold: 2 },
+      { id: 'oulu', name: 'Pohjanmaa / Oulu', cities: 'Oulu, Kajaani', threshold: 4 },
+      { id: 'central', name: 'Keski-Suomi', cities: 'Jyväskylä, Tampere', threshold: 5 },
+      { id: 'south', name: 'Etelä-Suomi', cities: 'Helsinki, Turku', threshold: 6 }
+    ],
+
+    // Computed URLs
+    get ruka3Url() { return `https://ruka3.panocloud.webcam/raw_panorama1.tiles/preview.jpg?t=${Date.now()}`; },
+    get jokkmokkNRAUrl() { return `https://uk.jokkmokk.jp/photo/nra/latest.jpg?t=${Date.now()}`; },
+    get jokkmokkNR2Url() { return `https://uk.jokkmokk.jp/photo/nr2/latest.jpg?t=${Date.now()}`; },
+    get jokkmokkNR3Url() { return `https://uk.jokkmokk.jp/photo/nr3/latest.jpg?t=${Date.now()}`; },
+    get jokkmokkNR5Url() { return `https://uk.jokkmokk.jp/photo/nr5/latest.jpg?t=${Date.now()}`; },
+
+    // DSCOVR display
+    get bzDisplay() { return this.bz !== null ? this.bz.toFixed(1) : '—'; },
+    get btDisplay() { return this.bt !== null ? this.bt.toFixed(1) : '—'; },
+    get speedDisplay() { return this.speed !== null ? Math.round(this.speed) : '—'; },
+    get densityDisplay() { return this.density !== null ? this.density.toFixed(1) : '—'; },
+    get hpDisplay() { return this.hp !== null ? Math.round(this.hp) : '—'; },
+    get bzClass() {
+      if (this.bz === null) return 'bg-slate-800 text-slate-500';
+      if (this.bz <= -3) return 'bz-south';
+      if (this.bz >= 1) return 'bz-north';
+      return 'bz-zero';
     },
-    get hankasalmiUrl() {
-      return `http://murtoinen.jklsirius.fi/allsky/latest.jpg?t=${Date.now()}`;
+    get bzDirection() {
+      if (this.bz === null) return '—';
+      if (this.bz <= -3) return '⬅️ Etelään (SUOSII revontulia)';
+      if (this.bz >= 1) return '➡️ Pohjoiseen';
+      return '↔️ Neutraali';
     },
-    
-    // Computed classes
+
+    // Kp
     get kpColorClass() {
       if (this.kp === null) return 'bg-slate-800';
       if (this.kp < 3) return 'kp-quiet';
@@ -294,7 +392,8 @@ function dashboard() {
       if (this.kp < 6) return 'kp-active';
       return 'kp-storm';
     },
-    
+
+    // NOAA scales
     get rColorClass() {
       const r = parseInt(this.noaaScale.R) || 0;
       if (r >= 3) return 'kp-storm';
@@ -316,7 +415,6 @@ function dashboard() {
       if (g >= 1) return 'kp-unsettled';
       return 'kp-quiet';
     },
-    
     get rText() {
       const texts = ['Ei häiriöitä', 'Pieni (R1)', 'Kohtalainen (R2)', 'Suuri (R3)', 'Vaikea (R4)', 'Äärimmäinen (R5)'];
       return texts[parseInt(this.noaaScale.R) || 0];
@@ -329,34 +427,28 @@ function dashboard() {
       const texts = ['Ei myrskyä', 'Pieni (G1)', 'Kohtalainen (G2)', 'Suuri (G3)', 'Vaikea (G4)', 'Äärimmäinen (G5)'];
       return texts[parseInt(this.noaaScale.G) || 0];
     },
-    
-    // Kp-kynnys paikkakunnille (näkyvyys horisontissa)
-    thresholds: {
-      lapland: 1,       // Utsjoki, Inari
-      midlapland: 2,    // Sodankylä, Rovaniemi
-      oulu: 4,          // Oulu, Kajaani
-      central: 5,       // Jyväskylä, Tampere
-      south: 6          // Helsinki, Turku
-    },
-    
-    chanceClass(region) {
-      const threshold = this.thresholds[region];
-      if (this.kp === null) return 'bg-slate-700 text-slate-400';
-      if (this.kp >= threshold + 2) return 'kp-quiet text-white';
-      if (this.kp >= threshold) return 'kp-unsettled text-white';
-      if (this.kp >= threshold - 1) return 'bg-slate-600 text-slate-200';
+
+    // Mahdollisuus
+    chanceClass(regionId) {
+      const region = this.regions.find(r => r.id === regionId);
+      if (!region || this.kp === null) return 'bg-slate-700 text-slate-400';
+      const t = region.threshold;
+      if (this.kp >= t + 2) return 'kp-quiet text-white';
+      if (this.kp >= t) return 'kp-unsettled text-white';
+      if (this.kp >= t - 1) return 'bg-slate-600 text-slate-200';
       return 'bg-slate-800 text-slate-500';
     },
-    
-    chanceText(region) {
-      const threshold = this.thresholds[region];
-      if (this.kp === null) return 'LADATAAN';
-      if (this.kp >= threshold + 2) return '✅ SUURI MAHDOLLISUUS';
-      if (this.kp >= threshold) return '✅ MAHDOLLINEN';
-      if (this.kp >= threshold - 1) return '⚠️ HEIKKO MAHDOLLISUUS';
+    chanceText(regionId) {
+      const region = this.regions.find(r => r.id === regionId);
+      if (!region || this.kp === null) return 'LADATAAN';
+      const t = region.threshold;
+      if (this.kp >= t + 2) return '✅ SUURI MAHDOLLISUUS';
+      if (this.kp >= t) return '✅ MAHDOLLINEN';
+      if (this.kp >= t - 1) return '⚠️ HEIKKO MAHDOLLISUUS';
       return '❌ EI MAHDOLLISUUTTA';
     },
-    
+
+    // Ennusteet
     forecastColorClass(kp) {
       if (kp === null) return 'bg-slate-800';
       if (kp < 3) return 'kp-quiet';
@@ -364,7 +456,6 @@ function dashboard() {
       if (kp < 6) return 'kp-active';
       return 'kp-storm';
     },
-    
     forecastStatus(kp) {
       if (kp === null) return '—';
       if (kp < 2) return 'Rauhallinen';
@@ -375,44 +466,78 @@ function dashboard() {
       if (kp < 7) return 'Voimakas myrsky';
       return 'Äärimmäinen myrsky';
     },
-    
-    // Init
+
+    // INIT
     async init() {
       await Promise.all([
         this.fetchKp(),
         this.fetchForecast(),
-        this.fetchScales()
+        this.fetchScales(),
+        this.fetchDscovr()
       ]);
-      
-      // Päivitä 60s välein
       setInterval(() => this.fetchKp(), 60000);
-      setInterval(() => this.fetchScales(), 900000); // 15 min
-      setInterval(() => this.fetchForecast(), 900000); // 15 min
-      
-      // Päivitä webcam-kuvat 90s välein
-      setInterval(() => {
-        // Re-trigger URL update (Alpine re-evaluates getters)
-        this.webcamTick = Date.now();
-      }, 90000);
+      setInterval(() => this.fetchDscovr(), 60000);
+      setInterval(() => this.fetchScales(), 900000);
+      setInterval(() => this.fetchForecast(), 900000);
     },
-    
+
     async fetchKp() {
       try {
         const r = await fetch('https://services.swpc.noaa.gov/json/planetary_k_index_1m.json');
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
-        if (data.length === 0) throw new Error('Empty data');
+        if (data.length === 0) throw new Error('Empty');
         const latest = data[data.length - 1];
         this.kp = latest.kp_index;
         this.kpDisplay = this.kp.toFixed(1);
         this.kpStatusText = this.forecastStatus(this.kp);
         this.lastUpdate = new Date().toLocaleTimeString('fi-FI');
       } catch (e) {
-        console.error('Kp fetch failed:', e);
-        this.kpStatusText = '⚠️ Datan lataus epäonnistui';
+        console.error('Kp:', e);
       }
     },
-    
+
+    async fetchDscovr() {
+      try {
+        const r = await fetch('https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        // Data on lista objekteja, joissa on bz_gsm, bt, density, speed
+        const valid = data.filter(d => d.bz_gsm !== null && d.bt !== null && d.active);
+        if (valid.length === 0) throw new Error('No valid DSCOVR data');
+        const latest = valid[valid.length - 1];
+        this.bz = parseFloat(latest.bz_gsm);
+        this.bt = parseFloat(latest.bt);
+        // Nopeus ja tiheal toisessa endpointissa, defaultataan jos ei saatavilla
+        // Haetaan plasma eri kutsulla
+        try {
+          const pr = await fetch('https://services.swpc.noaa.gov/products/solar-wind/plasma-2-hour.json');
+          if (pr.ok) {
+            const pdata = await pr.json();
+            if (pdata.length > 1) {
+              const latestP = pdata[pdata.length - 1];
+              // Ets plasma-nopeus ja tiheal
+              const header = pdata[0];
+              const speedIdx = header.indexOf('speed');
+              const denIdx = header.indexOf('density');
+              if (speedIdx >= 0) this.speed = parseFloat(latestP[speedIdx]);
+              if (denIdx >= 0) this.density = parseFloat(latestP[denIdx]);
+            }
+          }
+        } catch (pe) { console.warn('Plasma:', pe); }
+
+        // HP30 likimain: Boylen indeksi perusteella
+        // Phi = 10^-4 * ν^2 + 11.7 * B * sin^3(θ/2)
+        if (this.speed && this.bt && this.bz !== null) {
+          const theta = Math.acos(Math.abs(this.bz) / this.bt) * 180 / Math.PI;
+          const phi = 0.0001 * this.speed * this.speed + 11.7 * this.bt * Math.pow(Math.sin(theta * Math.PI / 360), 3);
+          this.hp = Math.max(0, phi * 0.6); // karkea approksimaatio
+        }
+      } catch (e) {
+        console.error('DSCOVR:', e);
+      }
+    },
+
     async fetchForecast() {
       try {
         const r = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
@@ -426,8 +551,7 @@ function dashboard() {
           { label: '+24h', offset: 24*3600*1000 }
         ];
         this.forecasts = targets.map(t => {
-          const targetTime = now + t.offset;
-          const nearest = this.nearestForecast(data, targetTime);
+          const nearest = this.nearestForecast(data, now + t.offset);
           const forecastTime = new Date(nearest.time_tag);
           return {
             label: t.label,
@@ -436,24 +560,21 @@ function dashboard() {
           };
         });
       } catch (e) {
-        console.error('Forecast fetch failed:', e);
+        console.error('Forecast:', e);
       }
     },
-    
+
     nearestForecast(data, targetTime) {
       let nearest = data[0];
       let minDiff = Infinity;
       for (const f of data) {
         const ft = new Date(f.time_tag).getTime();
         const diff = Math.abs(ft - targetTime);
-        if (diff < minDiff) {
-          minDiff = diff;
-          nearest = f;
-        }
+        if (diff < minDiff) { minDiff = diff; nearest = f; }
       }
       return nearest;
     },
-    
+
     async fetchScales() {
       try {
         const r = await fetch('https://services.swpc.noaa.gov/products/noaa-scales.json');
@@ -466,19 +587,11 @@ function dashboard() {
           G: current.G.Scale || '0'
         };
       } catch (e) {
-        console.error('Scales fetch failed:', e);
+        console.error('Scales:', e);
       }
     }
   };
 }
-
-// Lisätät intervalarvot PanoCloud-kuvan päivittämiseen (workaround Alpine.js getter-rajoituksille)
-setInterval(() => {
-  document.querySelectorAll('img[src*="panocloud"]').forEach(img => {
-    const base = img.src.split('?')[0];
-    img.src = `${base}?t=${Date.now()}`;
-  });
-}, 90000);
 </script>
 
 </body>

@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌌 Revontulien Dashboard</title>
+<meta name="description" content="Reaaliaikainen revontuliennuste Suomeen. NOAA Kp, magnetometri, webcams.">
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+<style>
+  html, body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background: radial-gradient(ellipse at top, #0c1428 0%, #050713 100%); min-height: 100vh; }
+  .glass { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.15); }
+  .glass-strong { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(148, 163, 184, 0.2); }
+  .kp-quiet { background: linear-gradient(135deg, #064e3b 0%, #047857 100%); }
+  .kp-unsettled { background: linear-gradient(135deg, #78350f 0%, #b45309 100%); }
+  .kp-active { background: linear-gradient(135deg, #7c2d12 0%, #c2410c 100%); }
+  .kp-storm { background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 100%); }
+  .pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+  .loading-shimmer { background: linear-gradient(90deg, #1e293b 0%, #334155 50%, #1e293b 100%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .webcam-frame { aspect-ratio: 4/3; }
+  .aurora-bg {
+    background-image: 
+      radial-gradient(circle at 20% 30%, rgba(34, 197, 94, 0.08) 0%, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(34, 197, 94, 0.05) 0%, transparent 40%);
+  @media (prefers-color-scheme: light) {
+    body { background: radial-gradient(ellipse at top, #f1f5f9 0%, #cbd5e1 100%); }
+    .glass { background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(15, 23, 42, 0.1); }
+    .glass-strong { background: rgba(255, 255, 255, 0.9); }
+  }
+</style>
+</head>
+<body class="text-slate-100 aurora-bg">
+
+<div x-data="dashboard()" x-init="init()" class="max-w-6xl mx-auto p-3 md:p-6 space-y-4 md:space-y-6">
+
+  <!-- Header -->
+  <header class="pt-2 md:pt-4 text-center">
+    <h1 class="text-2xl md:text-5xl font-bold mb-1 bg-gradient-to-r from-green-300 via-emerald-200 to-green-300 bg-clip-text text-transparent">
+      🌌 Revontulien Dashboard
+    </h1>
+    <p class="text-slate-400 text-xs md:text-sm">
+      Reaaliaikainen tilanne Suomessa • Päivitetty: <span x-text="lastUpdate" class="font-mono"></span>
+    </p>
+    <div class="mt-2 flex flex-wrap justify-center gap-2 text-xs">
+      <span class="glass-strong px-2 py-1 rounded">📡 NOAA SWPC</span>
+      <span class="glass-strong px-2 py-1 rounded">🇫🇮 Ilmatieteen laitos</span>
+      <span class="glass-strong px-2 py-1 rounded">📸 PanoCloud</span>
+      <span class="glass-strong px-2 py-1 rounded">🧲 SGO Sodankylä</span>
+    </div>
+  </header>
+
+  <!-- Hero: Kp + mahdollisuudet -->
+  <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
+    <div class="grid md:grid-cols-3 gap-4 md:gap-6">
+
+      <!-- Kp iso -->
+      <div class="text-center md:border-r md:border-slate-700 md:pr-4">
+        <div class="text-xs text-slate-400 uppercase tracking-widest">Kp-indeksi juuri nyt</div>
+        <div :class="kpColorClass" class="text-6xl md:text-8xl font-black my-3 rounded-2xl p-3 md:p-4 shadow-2xl transition-all duration-500">
+          <span x-text="kpDisplay" :class="kp === null ? 'loading-shimmer' : ''"></span>
+        </div>
+        <div class="text-base md:text-xl" x-text="kpStatusText"></div>
+        <div class="text-xs text-slate-500 mt-1">Päivittyy 60s välein</div>
+      </div>
+
+      <!-- Mahdollisuudet Suomessa -->
+      <div class="md:col-span-2">
+        <h3 class="font-semibold text-sm md:text-base mb-3 text-slate-300">📍 Mahdollisuus nähdä revontulet juuri nyt</h3>
+        <div class="space-y-2">
+          <div class="grid grid-cols-12 gap-2 items-center">
+            <div class="col-span-4 text-xs md:text-sm font-medium">Pohjois-Lappi</div>
+            <div class="col-span-2 text-xs text-slate-400">Utsjoki, Inari</div>
+            <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs" :class="chanceClass('lapland')" x-text="chanceText('lapland')"></div>
+          </div>
+          <div class="grid grid-cols-12 gap-2 items-center">
+            <div class="col-span-4 text-xs md:text-sm font-medium">Keski-Lappi</div>
+            <div class="col-span-2 text-xs text-slate-400">Sodankylä, Rovaniemi</div>
+            <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs" :class="chanceClass('midlapland')" x-text="chanceText('midlapland')"></div>
+          </div>
+          <div class="grid grid-cols-12 gap-2 items-center">
+            <div class="col-span-4 text-xs md:text-sm font-medium">Pohjanmaa / Oulu</div>
+            <div class="col-span-2 text-xs text-slate-400">Oulu, Kajaani</div>
+            <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs" :class="chanceClass('oulu')" x-text="chanceText('oulu')"></div>
+          </div>
+          <div class="grid grid-cols-12 gap-2 items-center">
+            <div class="col-span-4 text-xs md:text-sm font-medium">Keski-Suomi</div>
+            <div class="col-span-2 text-xs text-slate-400">Jyväskylä, Tampere</div>
+            <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs" :class="chanceClass('central')" x-text="chanceText('central')"></div>
+          </div>
+          <div class="grid grid-cols-12 gap-2 items-center">
+            <div class="col-span-4 text-xs md:text-sm font-medium">Etelä-Suomi</div>
+            <div class="col-span-2 text-xs text-slate-400">Helsinki, Turku</div>
+            <div class="col-span-6 rounded-lg h-9 flex items-center px-3 font-bold text-xs" :class="chanceClass('south')" x-text="chanceText('south')"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Kp-ennusteet 3h, 6h, 12h, 24h -->
+  <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
+    <h2 class="text-lg md:text-xl font-semibold mb-3 flex items-center">
+      <span class="mr-2">⏱️</span> Kp-ennusteet seuraaville tunneille
+    </h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+      <template x-for="(f, idx) in forecasts" :key="idx">
+        <div class="rounded-xl p-3 md:p-4 text-center transition-all duration-500 hover:scale-105" :class="forecastColorClass(f.kp)">
+          <div class="text-xs uppercase opacity-80 font-medium" x-text="f.label"></div>
+          <div class="text-3xl md:text-5xl font-black my-1 md:my-2" x-text="f.kp !== null ? f.kp.toFixed(1) : '—'"></div>
+          <div class="text-xs opacity-90" x-text="forecastStatus(f.kp)"></div>
+          <div class="text-[10px] opacity-60 mt-1 font-mono" x-text="f.time"></div>
+        </div>
+      </template>
+    </div>
+    <p class="text-xs text-slate-500 mt-3">
+      💡 Kp-indeksi kertoo geomagneettisen aktiivisuuden voimakkuuden. <strong>Kp 5+</strong> = revontulet näkyvät koko Suomessa.
+    </p>
+  </section>
+
+  <!-- NOAA-asteikot -->
+  <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
+    <h2 class="text-lg md:text-xl font-semibold mb-3 flex items-center">
+      <span class="mr-2">🛰️</span> NOAA-asteikot
+    </h2>
+    <div class="grid md:grid-cols-3 gap-3">
+      <div class="rounded-xl p-4" :class="rColorClass">
+        <div class="flex justify-between items-start">
+          <div class="text-xs uppercase font-semibold">R — Radio Blackout</div>
+          <div class="text-3xl font-black" x-text="noaaScale.R"></div>
+        </div>
+        <div class="text-sm mt-1" x-text="rText"></div>
+        <div class="text-xs opacity-60 mt-1">HF-radiohäiriöt</div>
+      </div>
+      <div class="rounded-xl p-4" :class="sColorClass">
+        <div class="flex justify-between items-start">
+          <div class="text-xs uppercase font-semibold">S — Solar Radiation</div>
+          <div class="text-3xl font-black" x-text="noaaScale.S"></div>
+        </div>
+        <div class="text-sm mt-1" x-text="sText"></div>
+        <div class="text-xs opacity-60 mt-1">Säteilyvaara</div>
+      </div>
+      <div class="rounded-xl p-4" :class="gColorClass">
+        <div class="flex justify-between items-start">
+          <div class="text-xs uppercase font-semibold">G — Geomagnetic Storm</div>
+          <div class="text-3xl font-black" x-text="noaaScale.G"></div>
+        </div>
+        <div class="text-sm mt-1" x-text="gText"></div>
+        <div class="text-xs opacity-60 mt-1">Geomagneettinen myrsky</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Webcams -->
+  <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
+    <h2 class="text-lg md:text-xl font-semibold mb-3 flex items-center">
+      <span class="mr-2">📸</span> Live-kamerat juuri nyt
+      <span class="ml-auto text-xs text-slate-500">↻ päivittyy 60s</span>
+    </h2>
+    <div class="grid md:grid-cols-2 gap-3 md:gap-4">
+      <!-- Ruka Pessari Top -->
+      <div class="rounded-xl overflow-hidden border border-slate-700">
+        <div class="bg-slate-800 px-3 py-2 flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold">🥇 Ruka Pessari Top</div>
+            <div class="text-xs text-slate-400">66.17°N, 29.15°E • 492m • Suomen paras revontulinäkymä</div>
+          </div>
+          <a href="https://ruka3.panocloud.webcam" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
+        </div>
+        <img :src="ruka3Url" @load="webcamStatus.ruka3='live'" @error="webcamStatus.ruka3='error'" class="w-full webcam-frame bg-slate-900" alt="Ruka Pessari Top">
+        <div class="bg-slate-800/60 px-3 py-1 text-xs flex items-center justify-between">
+          <span x-show="webcamStatus.ruka3==='live'" class="text-emerald-400">● LIVE</span>
+          <span x-show="webcamStatus.ruka3==='error'" class="text-red-400">● VIRHE</span>
+          <span x-show="webcamStatus.ruka3===null" class="text-slate-500">⏳ Ladataan...</span>
+          <a :href="'https://ruka3.panocloud.webcam/snapshot.jpg?t='+Date.now()" target="_blank" class="text-slate-400 hover:text-white">Avaa alkuperäinen →</a>
+        </div>
+      </div>
+
+      <!-- Sodankylä SGO -->
+      <div class="rounded-xl overflow-hidden border border-slate-700">
+        <div class="bg-slate-800 px-3 py-2 flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold">🧲 Sodankylä SGO</div>
+            <div class="text-xs text-slate-400">67.42°N, 26.39°E • Geofysiikan observatorio</div>
+          </div>
+          <a href="http://www.sgo.fi/Data/RealTime/" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
+        </div>
+        <iframe src="http://www.sgo.fi/Data/RealTime/RealTimeImag.php" class="w-full webcam-frame bg-slate-900" frameborder="0"></iframe>
+        <div class="bg-slate-800/60 px-3 py-1 text-xs text-slate-400">
+          All-sky + magnetometri (X, Z) reaaliajassa
+        </div>
+      </div>
+
+      <!-- Hankasalmi -->
+      <div class="rounded-xl overflow-hidden border border-slate-700">
+        <div class="bg-slate-800 px-3 py-2 flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold">🔭 Hankasalmi</div>
+            <div class="text-xs text-slate-400">62.25°N, 26.60°E • Jyväskylän Sirius</div>
+          </div>
+          <a href="http://murtoinen.jklsirius.fi/" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
+        </div>
+        <img :src="hankasalmiUrl" @load="webcamStatus.hankasalmi='live'" @error="webcamStatus.hankasalmi='error'" class="w-full webcam-frame bg-slate-900" alt="Hankasalmi all-sky">
+        <div class="bg-slate-800/60 px-3 py-1 text-xs flex items-center">
+          <span x-show="webcamStatus.hankasalmi==='live'" class="text-emerald-400 mr-2">● LIVE</span>
+          <span x-show="webcamStatus.hankasalmi==='error'" class="text-red-400 mr-2">● VIRHE</span>
+          <span x-show="webcamStatus.hankasalmi===null" class="text-slate-500 mr-2">⏳ Ladataan...</span>
+          <span class="text-slate-400">Näkyy vain myrskyillä (G1+)</span>
+        </div>
+      </div>
+
+      <!-- Lights Over Lapland Abisko -->
+      <div class="rounded-xl overflow-hidden border border-slate-700">
+        <div class="bg-slate-800 px-3 py-2 flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold">🇸🇪 Abisko / Lights Over Lapland</div>
+            <div class="text-xs text-slate-400">68.36°N, 18.78°E • Ruotsin paras revontulipaikka</div>
+          </div>
+          <a href="https://lightsoverlapland.com/aurora-webcam/" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
+        </div>
+        <iframe src="https://lightsoverlapland.com/aurora-webcam/" class="w-full webcam-frame bg-slate-900" frameborder="0"></iframe>
+        <div class="bg-slate-800/60 px-3 py-1 text-xs text-slate-400">
+          360° live panoraama
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 text-xs text-slate-400">
+      💡 Lisää kameroita: 
+      <a href="https://virmalised.ee/aurora-live-cameras/" target="_blank" class="text-emerald-400 hover:underline">virmalised.ee</a> • 
+      <a href="https://auroraholidays.net/northern-lights-live-stream-utsjoki/" target="_blank" class="text-emerald-400 hover:underline">Utsjoki</a> • 
+      <a href="https://glassresort.fi/northern-lights-camera-at-glass-resort-follow-the-aurora-in-real-time/" target="_blank" class="text-emerald-400 hover:underline">Rovaniemi Glass Resort</a>
+    </div>
+  </section>
+
+  <!-- Linkit -->
+  <section class="glass rounded-2xl p-4 md:p-6">
+    <h2 class="text-base md:text-lg font-semibold mb-3 flex items-center">
+      <span class="mr-2">🔗</span> Tärkeät linkit
+    </h2>
+    <div class="grid md:grid-cols-2 gap-x-6 gap-y-1 text-xs md:text-sm">
+      <a href="https://www.ilmatieteenlaitos.fi/revontulet-ja-avaruussaa" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Ilmatieteen laitos — Revontulet ja avaruussää</a>
+      <a href="https://jemma.mobi/mittarit" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Jemma.mobi — Suomalainen mittari-sivu</a>
+      <a href="https://www.sgo.fi/" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 SGO Sodankylä — Geofysiikan observatorio</a>
+      <a href="https://www.taivaanvahti.fi/observations/list/11573/" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Taivaanvahti — Revontulihavainnot</a>
+      <a href="https://www.spaceweatherlive.com/en/auroral-activity/aurora-forecast.html" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 SpaceWeatherLive — Kp-ennuste</a>
+      <a href="https://services.swpc.noaa.gov/products/aurora-30-minute-forecast" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA OVAAL — Revontuliennustekartta</a>
+      <a href="https://services.swpc.noaa.gov/json/planetary_k_index_1m.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA Kp-data (JSON)</a>
+      <a href="https://services.swpc.noaa.gov/products/summary/10cm-flux.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA 10cm flux (auringon aktiivisuus)</a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="text-center text-slate-500 text-xs py-4">
+    <div>Tietolähteet: NOAA SWPC, Ilmatieteen laitos, SGO Sodankylä, PanoCloud</div>
+    <div class="mt-1">Päivittyy automaattisesti 60s välein • Ei tallenna käyttäjädataa</div>
+  </footer>
+
+</div>
+
+<script>
+function dashboard() {
+  return {
+    // Tila
+    kp: null,
+    kpDisplay: '—',
+    kpStatusText: 'Ladataan...',
+    forecasts: [
+      { label: '+3h', kp: null, time: '' },
+      { label: '+6h', kp: null, time: '' },
+      { label: '+12h', kp: null, time: '' },
+      { label: '+24h', kp: null, time: '' }
+    ],
+    noaaScale: { R: '—', S: '—', G: '—' },
+    webcamStatus: { ruka3: null, hankasalmi: null },
+    lastUpdate: '—',
+    
+    // Computed URLs (päivittyvät)
+    get ruka3Url() {
+      return `https://ruka3.panocloud.webcam/raw_panorama1.tiles/preview.jpg?t=${Date.now()}`;
+    },
+    get hankasalmiUrl() {
+      return `http://murtoinen.jklsirius.fi/allsky/latest.jpg?t=${Date.now()}`;
+    },
+    
+    // Computed classes
+    get kpColorClass() {
+      if (this.kp === null) return 'bg-slate-800';
+      if (this.kp < 3) return 'kp-quiet';
+      if (this.kp < 5) return 'kp-unsettled';
+      if (this.kp < 6) return 'kp-active';
+      return 'kp-storm';
+    },
+    
+    get rColorClass() {
+      const r = parseInt(this.noaaScale.R) || 0;
+      if (r >= 3) return 'kp-storm';
+      if (r >= 2) return 'kp-active';
+      if (r >= 1) return 'kp-unsettled';
+      return 'kp-quiet';
+    },
+    get sColorClass() {
+      const s = parseInt(this.noaaScale.S) || 0;
+      if (s >= 3) return 'kp-storm';
+      if (s >= 2) return 'kp-active';
+      if (s >= 1) return 'kp-unsettled';
+      return 'kp-quiet';
+    },
+    get gColorClass() {
+      const g = parseInt(this.noaaScale.G) || 0;
+      if (g >= 3) return 'kp-storm';
+      if (g >= 2) return 'kp-active';
+      if (g >= 1) return 'kp-unsettled';
+      return 'kp-quiet';
+    },
+    
+    get rText() {
+      const texts = ['Ei häiriöitä', 'Pieni (R1)', 'Kohtalainen (R2)', 'Suuri (R3)', 'Vaikea (R4)', 'Äärimmäinen (R5)'];
+      return texts[parseInt(this.noaaScale.R) || 0];
+    },
+    get sText() {
+      const texts = ['Ei häiriöitä', 'Pieni (S1)', 'Kohtalainen (S2)', 'Suuri (S3)', 'Vaikea (S4)', 'Äärimmäinen (S5)'];
+      return texts[parseInt(this.noaaScale.S) || 0];
+    },
+    get gText() {
+      const texts = ['Ei myrskyä', 'Pieni (G1)', 'Kohtalainen (G2)', 'Suuri (G3)', 'Vaikea (G4)', 'Äärimmäinen (G5)'];
+      return texts[parseInt(this.noaaScale.G) || 0];
+    },
+    
+    // Kp-kynnys paikkakunnille (näkyvyys horisontissa)
+    thresholds: {
+      lapland: 1,       // Utsjoki, Inari
+      midlapland: 2,    // Sodankylä, Rovaniemi
+      oulu: 4,          // Oulu, Kajaani
+      central: 5,       // Jyväskylä, Tampere
+      south: 6          // Helsinki, Turku
+    },
+    
+    chanceClass(region) {
+      const threshold = this.thresholds[region];
+      if (this.kp === null) return 'bg-slate-700 text-slate-400';
+      if (this.kp >= threshold + 2) return 'kp-quiet text-white';
+      if (this.kp >= threshold) return 'kp-unsettled text-white';
+      if (this.kp >= threshold - 1) return 'bg-slate-600 text-slate-200';
+      return 'bg-slate-800 text-slate-500';
+    },
+    
+    chanceText(region) {
+      const threshold = this.thresholds[region];
+      if (this.kp === null) return 'LADATAAN';
+      if (this.kp >= threshold + 2) return '✅ SUURI MAHDOLLISUUS';
+      if (this.kp >= threshold) return '✅ MAHDOLLINEN';
+      if (this.kp >= threshold - 1) return '⚠️ HEIKKO MAHDOLLISUUS';
+      return '❌ EI MAHDOLLISUUTTA';
+    },
+    
+    forecastColorClass(kp) {
+      if (kp === null) return 'bg-slate-800';
+      if (kp < 3) return 'kp-quiet';
+      if (kp < 5) return 'kp-unsettled';
+      if (kp < 6) return 'kp-active';
+      return 'kp-storm';
+    },
+    
+    forecastStatus(kp) {
+      if (kp === null) return '—';
+      if (kp < 2) return 'Rauhallinen';
+      if (kp < 3) return 'Epävakainen';
+      if (kp < 4) return 'Aktiivinen';
+      if (kp < 5) return 'Pieni myrsky';
+      if (kp < 6) return 'Kohtalainen myrsky';
+      if (kp < 7) return 'Voimakas myrsky';
+      return 'Äärimmäinen myrsky';
+    },
+    
+    // Init
+    async init() {
+      await Promise.all([
+        this.fetchKp(),
+        this.fetchForecast(),
+        this.fetchScales()
+      ]);
+      
+      // Päivitä 60s välein
+      setInterval(() => this.fetchKp(), 60000);
+      setInterval(() => this.fetchScales(), 900000); // 15 min
+      setInterval(() => this.fetchForecast(), 900000); // 15 min
+      
+      // Päivitä webcam-kuvat 90s välein
+      setInterval(() => {
+        // Re-trigger URL update (Alpine re-evaluates getters)
+        this.webcamTick = Date.now();
+      }, 90000);
+    },
+    
+    async fetchKp() {
+      try {
+        const r = await fetch('https://services.swpc.noaa.gov/json/planetary_k_index_1m.json');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        if (data.length === 0) throw new Error('Empty data');
+        const latest = data[data.length - 1];
+        this.kp = latest.kp_index;
+        this.kpDisplay = this.kp.toFixed(1);
+        this.kpStatusText = this.forecastStatus(this.kp);
+        this.lastUpdate = new Date().toLocaleTimeString('fi-FI');
+      } catch (e) {
+        console.error('Kp fetch failed:', e);
+        this.kpStatusText = '⚠️ Datan lataus epäonnistui';
+      }
+    },
+    
+    async fetchForecast() {
+      try {
+        const r = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        const now = Date.now();
+        const targets = [
+          { label: '+3h', offset: 3*3600*1000 },
+          { label: '+6h', offset: 6*3600*1000 },
+          { label: '+12h', offset: 12*3600*1000 },
+          { label: '+24h', offset: 24*3600*1000 }
+        ];
+        this.forecasts = targets.map(t => {
+          const targetTime = now + t.offset;
+          const nearest = this.nearestForecast(data, targetTime);
+          const forecastTime = new Date(nearest.time_tag);
+          return {
+            label: t.label,
+            kp: nearest.Kp,
+            time: forecastTime.toLocaleString('fi-FI', { weekday: 'short', hour: '2-digit', minute: '2-digit' })
+          };
+        });
+      } catch (e) {
+        console.error('Forecast fetch failed:', e);
+      }
+    },
+    
+    nearestForecast(data, targetTime) {
+      let nearest = data[0];
+      let minDiff = Infinity;
+      for (const f of data) {
+        const ft = new Date(f.time_tag).getTime();
+        const diff = Math.abs(ft - targetTime);
+        if (diff < minDiff) {
+          minDiff = diff;
+          nearest = f;
+        }
+      }
+      return nearest;
+    },
+    
+    async fetchScales() {
+      try {
+        const r = await fetch('https://services.swpc.noaa.gov/products/noaa-scales.json');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        const current = data['0'];
+        this.noaaScale = {
+          R: current.R.Scale || '0',
+          S: current.S.Scale || '0',
+          G: current.G.Scale || '0'
+        };
+      } catch (e) {
+        console.error('Scales fetch failed:', e);
+      }
+    }
+  };
+}
+
+// Lisätät intervalarvot PanoCloud-kuvan päivittämiseen (workaround Alpine.js getter-rajoituksille)
+setInterval(() => {
+  document.querySelectorAll('img[src*="panocloud"]').forEach(img => {
+    const base = img.src.split('?')[0];
+    img.src = `${base}?t=${Date.now()}`;
+  });
+}, 90000);
+</script>
+
+</body>
+</html>

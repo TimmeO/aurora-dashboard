@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🌌 Revontulien Dashboard</title>
-<meta name="description" content="Reaaliaikainen revontuliennuste Suomeen. NOAA Kp, DSCOVR, magnetometri, webcams.">
+<meta name="description" content="Reaaliaikainen revontuliennuste. GPS-sijainti, NOAA Kp, DSCOVR, magneettikenttä, webcams.">
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
 <style>
@@ -30,6 +30,7 @@
       radial-gradient(circle at 80% 70%, rgba(34, 197, 94, 0.05) 0%, transparent 40%);
   }
   .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite; }
+  .gps-active { border-color: #10b981 !important; box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); }
   @media (prefers-color-scheme: light) {
     body { background: radial-gradient(ellipse at top, #f1f5f9 0%, #cbd5e1 100%); }
     .glass { background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(15, 23, 42, 0.1); }
@@ -47,22 +48,130 @@
       🌌 Revontulien Dashboard
     </h1>
     <p class="text-slate-400 text-xs md:text-sm">
-      Reaaliaikainen tilanne Suomessa & Pohjoismaissa • Päivitetty: <span x-text="lastUpdate" class="font-mono"></span>
+      Reaaliaikainen tilanne • Päivitetty: <span x-text="lastUpdate" class="font-mono"></span>
     </p>
     <div class="mt-2 flex flex-wrap justify-center gap-2 text-xs">
+      <span class="glass-strong px-2 py-1 rounded">📍 GPS-sijainti</span>
       <span class="glass-strong px-2 py-1 rounded">📡 NOAA SWPC</span>
-      <span class="glass-strong px-2 py-1 rounded">🇫🇮 Ilmatieteen laitos</span>
-      <span class="glass-strong px-2 py-1 rounded">🇸🇪 IRF Kiruna</span>
-      <span class="glass-strong px-2 py-1 rounded">🇸🇪 Jokkmokk</span>
-      <span class="glass-strong px-2 py-1 rounded">🇳🇴 yr.no</span>
+      <span class="glass-strong px-2 py-1 rounded">🌞 DSCOVR</span>
+      <span class="glass-strong px-2 py-1 rounded">🇫🇮 FMI</span>
+      <span class="glass-strong px-2 py-1 rounded">📸 Pohjoismaat</span>
     </div>
   </header>
+
+  <!-- 📍 GPS-SIJAINNIN OSIO -->
+  <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl border-2 transition-all duration-500"
+           :class="hasLocation ? 'gps-active border-emerald-700/50' : 'border-slate-700'">
+    <h2 class="text-lg md:text-xl font-semibold mb-3 flex items-center">
+      <span class="mr-2">📍</span> Sijaintisi
+      <span x-show="hasLocation" class="ml-auto live-dot"></span>
+      <span x-show="!hasLocation" class="ml-auto text-xs text-slate-500">Ei vielä sijaintia</span>
+    </h2>
+
+    <!-- Pyydä GPS tai syötä manuaalisesti -->
+    <div x-show="!hasLocation" class="space-y-3">
+      <button @click="requestGPS()" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2">
+        <span>📡</span>
+        <span x-show="!gpsLoading">Käytä selaimen GPS-sijaintia</span>
+        <span x-show="gpsLoading">Haetaan sijaintia...</span>
+      </button>
+      <div class="text-center text-slate-500 text-xs">— tai syötä koordinaatit käsin —</div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs text-slate-400">Leveysaste (lat)</label>
+          <input type="number" step="0.001" x-model="manualLat" placeholder="60.170" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm font-mono">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Pituusaste (lon)</label>
+          <input type="number" step="0.001" x-model="manualLon" placeholder="24.940" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm font-mono">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <button @click="setManualLocation()" class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 rounded text-sm">
+          Aseta sijaintikot
+        </button>
+        <select @change="setPreset($event.target.value)" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+          <option value="">— Pikavalinnat —</option>
+          <option value="60.170,24.940">📍 Helsinki</option>
+          <option value="60.395,25.665">📍 Porvoo</option>
+          <option value="61.499,23.787">📍 Tampere</option>
+          <option value="62.241,25.720">📍 Jyväskylä</option>
+          <option value="65.012,25.465">📍 Oulu</option>
+          <option value="66.503,25.729">📍 Rovaniemi</option>
+          <option value="67.415,26.585">📍 Sodankylä</option>
+          <option value="68.910,27.026">📍 Inari</option>
+          <option value="69.760,27.030">📍 Utsjoki</option>
+          <option value="66.165,29.150">📍 Ruka</option>
+        </select>
+      </div>
+      <div x-show="gpsError" x-text="gpsError" class="text-red-400 text-xs mt-2"></div>
+    </div>
+
+    <!-- Sijaintitiedot näkyvät kun on saatu -->
+    <div x-show="hasLocation" class="grid md:grid-cols-3 gap-3 md:gap-4">
+      <!-- Koordinaatit -->
+      <div class="bg-slate-800/60 rounded-lg p-3">
+        <div class="text-xs text-slate-400 uppercase mb-1">Sijaintisi</div>
+        <div class="font-mono text-base mb-2">
+          <span x-text="formatLat(lat)"></span>, <span x-text="formatLon(lon)"></span>
+        </div>
+        <div class="text-xs text-slate-400" x-text="locationName"></div>
+        <button @click="clearLocation()" class="text-xs text-red-400 hover:underline mt-2">↻ Vaihda sijaintia</button>
+      </div>
+
+      <!-- Geomagneettinen leveysaste -->
+      <div class="bg-slate-800/60 rounded-lg p-3">
+        <div class="text-xs text-slate-400 uppercase mb-1">Geomagneettinen lat</div>
+        <div class="font-mono text-2xl font-bold" x-text="magLat.toFixed(1) + '°'"></div>
+        <div class="text-xs text-slate-400 mt-1">Tarvittava Kp: <span class="font-mono font-bold" x-text="kpThreshold.toFixed(1)"></span></div>
+      </div>
+
+      <!-- Magneettinen keskiyö -->
+      <div class="bg-slate-800/60 rounded-lg p-3">
+        <div class="text-xs text-slate-400 uppercase mb-1">Magneettinen keskiyö</div>
+        <div class="font-mono text-2xl font-bold" x-text="magMidnightFormatted"></div>
+        <div class="text-xs text-slate-400 mt-1" x-text="magMidnightCountdown"></div>
+      </div>
+    </div>
+
+    <!-- Säätiedot (FMI) -->
+    <div x-show="hasLocation && fmiData" class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+      <div class="bg-slate-800/60 rounded p-2">
+        <div class="text-slate-400">☁️ Pilvet</div>
+        <div class="font-mono font-bold text-base" :class="fmiData.cloudCover < 30 ? 'text-emerald-400' : fmiData.cloudCover < 70 ? 'text-yellow-400' : 'text-red-400'" x-text="fmiData.cloudCover !== null ? fmiData.cloudCover + '%' : '—'"></div>
+      </div>
+      <div class="bg-slate-800/60 rounded p-2">
+        <div class="text-slate-400">🌡️ Lämpötila</div>
+        <div class="font-mono font-bold text-base" x-text="fmiData.temperature !== null ? fmiData.temperature.toFixed(1) + '°C' : '—'"></div>
+      </div>
+      <div class="bg-slate-800/60 rounded p-2">
+        <div class="text-slate-400">💨 Tuuli</div>
+        <div class="font-mono font-bold text-base" x-text="fmiData.windSpeed !== null ? fmiData.windSpeed.toFixed(1) + ' m/s' : '—'"></div>
+      </div>
+      <div class="bg-slate-800/60 rounded p-2">
+        <div class="text-slate-400">☀️ Aurinko</div>
+        <div class="font-mono font-bold text-base" x-text="sunInfo"></div>
+      </div>
+    </div>
+
+    <!-- Päivitetty henkilökohtainen arvio -->
+    <div x-show="hasLocation" class="mt-3 rounded-lg p-3 transition-all duration-500" :class="myVisibilityClass">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs uppercase opacity-80">SINUN KATSELUARVIO juuri nyt</div>
+          <div class="text-lg font-bold" x-text="myVisibilityText"></div>
+        </div>
+        <div class="text-3xl" x-text="myVisibilityEmoji"></div>
+      </div>
+      <div class="text-xs opacity-90 mt-1" x-text="myVisibilityAdvice"></div>
+    </div>
+  </section>
 
   <!-- DSCOVR reaaliaikainen data -->
   <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
     <h2 class="text-lg md:text-xl font-semibold mb-3 flex items-center">
       <span class="mr-2">🌞</span> DSCOVR — Avaruussää juuri nyt
-      <span class="ml-auto text-xs text-slate-500">↻ päivittyy 60s</span>
+      <span class="ml-auto text-xs text-slate-500">↻ 60s</span>
     </h2>
     <div class="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3">
       <div class="rounded-xl p-3 text-center transition-all duration-500" :class="bzClass">
@@ -93,8 +202,8 @@
     </div>
     <div class="mt-3 text-xs text-slate-400 leading-relaxed">
       💡 <strong>Bz</strong> (interplanetaarinen magneettikenttä): <strong>etelään = revontulia suosiva</strong>.
-      NOAA Kp on 3 tunnin keskiarvo — DSCOVR Bz näyttää reaaliaikaisen tilanteen.
-      <span x-show="bz <= -3" class="text-emerald-400 font-bold ml-2">⚡ Bz etelään → aktiivinen!</span>
+      Kp on 3h keskiarvo — DSCOVR Bz on reaaliaikainen.
+      <span x-show="bz <= -3" class="text-emerald-400 font-bold ml-2">⚡ Bz etelään!</span>
     </div>
   </section>
 
@@ -102,7 +211,7 @@
   <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
     <div class="grid md:grid-cols-3 gap-4 md:gap-6">
       <div class="text-center md:border-r md:border-slate-700 md:pr-4">
-        <div class="text-xs text-slate-400 uppercase tracking-widest">Kp-indeksi juuri nyt</div>
+        <div class="text-xs text-slate-400 uppercase tracking-widest">Kp-indeksi</div>
         <div :class="kpColorClass" class="text-6xl md:text-8xl font-black my-3 rounded-2xl p-3 md:p-4 shadow-2xl transition-all duration-500">
           <span x-text="kpDisplay" :class="kp === null ? 'loading-shimmer' : ''"></span>
         </div>
@@ -110,7 +219,7 @@
         <div class="text-xs text-slate-500 mt-1">3h keskiarvo NOAA</div>
       </div>
       <div class="md:col-span-2">
-        <h3 class="font-semibold text-sm md:text-base mb-3 text-slate-300">📍 Mahdollisuus nähdä revontulet juuri nyt</h3>
+        <h3 class="font-semibold text-sm md:text-base mb-3 text-slate-300">📍 Alueelliset mahdollisuudet</h3>
         <div class="space-y-2">
           <template x-for="region in regions" :key="region.id">
             <div class="grid grid-cols-12 gap-2 items-center">
@@ -121,14 +230,11 @@
             </div>
           </template>
         </div>
-        <div class="mt-3 text-xs text-slate-500 italic">
-          Perustuu DSCOVR Bz:ään + NOAA Kp:hen. Korkeilla leveysasteilla (66°N+) tarvitaan Bz etelään lyhytaikaisestikin.
-        </div>
       </div>
     </div>
   </section>
 
-  <!-- Kp-ennusteet 3h, 6h, 12h, 24h -->
+  <!-- Kp-ennusteet -->
   <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
     <h2 class="text-lg md:text-xl font-semibold mb-3 flex items-center">
       <span class="mr-2">⏱️</span> Kp-ennusteet seuraaville tunneille
@@ -143,9 +249,6 @@
         </div>
       </template>
     </div>
-    <p class="text-xs text-slate-500 mt-3">
-      💡 <strong>Perjantai 9.10.</strong> — G2 geomagneettinen myrskyennuste, mahdollisesti Kp 5-6 → näkyy koko maassa.
-    </p>
   </section>
 
   <!-- NOAA-asteikot -->
@@ -160,7 +263,6 @@
           <div class="text-3xl font-black" x-text="noaaScale.R"></div>
         </div>
         <div class="text-sm mt-1" x-text="rText"></div>
-        <div class="text-xs opacity-60 mt-1">HF-radiohäiriöt</div>
       </div>
       <div class="rounded-xl p-4" :class="sColorClass">
         <div class="flex justify-between items-start">
@@ -168,7 +270,6 @@
           <div class="text-3xl font-black" x-text="noaaScale.S"></div>
         </div>
         <div class="text-sm mt-1" x-text="sText"></div>
-        <div class="text-xs opacity-60 mt-1">Säteilyvaara</div>
       </div>
       <div class="rounded-xl p-4" :class="gColorClass">
         <div class="flex justify-between items-start">
@@ -176,39 +277,34 @@
           <div class="text-3xl font-black" x-text="noaaScale.G"></div>
         </div>
         <div class="text-sm mt-1" x-text="gText"></div>
-        <div class="text-xs opacity-60 mt-1">Geomagneettinen myrsky</div>
       </div>
     </div>
   </section>
 
-  <!-- LIVE WEB CAMERAS - TOIMIVILLA URL:ILLA -->
+  <!-- Live-kamerat -->
   <section class="glass-strong rounded-2xl p-4 md:p-6 shadow-2xl">
     <h2 class="text-lg md:text-xl font-semibold mb-3 flex items-center">
-      <span class="mr-2">📸</span> Live-kamerat Pohjoismaista juuri nyt
-      <span class="ml-auto text-xs text-slate-500">↻ päivittyy 60s</span>
+      <span class="mr-2">📸</span> Live-kamerat Pohjoismaista
+      <span class="ml-auto text-xs text-slate-500">↻ 60s</span>
     </h2>
-
-    <!-- Hero: Ruka Pessari Top -->
     <div class="rounded-xl overflow-hidden border-2 border-emerald-700/50 mb-4 bg-slate-900">
       <div class="bg-slate-800 px-3 py-2 flex items-center justify-between">
         <div class="flex items-center gap-2">
           <span class="live-dot"></span>
           <div>
             <div class="text-sm font-semibold">🥇 Ruka Pessari Top</div>
-            <div class="text-xs text-slate-400">66.17°N, 29.15°E • 492m • Suomen paras revontulinäkymä</div>
+            <div class="text-xs text-slate-400">66.17°N, 29.15°E • 492m</div>
           </div>
         </div>
-        <a href="https://ruka3.panocloud.webcam" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ Alkuperäinen</a>
+        <a href="https://ruka3.panocloud.webcam" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
       </div>
       <img :src="ruka3Url" class="w-full webcam-frame bg-slate-900" alt="Ruka Pessari Top">
     </div>
-
-    <!-- Jokkmokk-kamerat (Ruotsin Lapin paras revontuliseuranta) -->
-    <h3 class="text-sm font-semibold text-slate-300 mb-2 mt-4">🇸🇪 Jokkmokk / Porjus, Ruotsin Lappi (66.95°N)</h3>
+    <h3 class="text-sm font-semibold text-slate-300 mb-2 mt-4">🇸🇪 Jokkmokk Porjus, Ruotsin Lappi (66.95°N)</h3>
     <div class="grid md:grid-cols-2 gap-3 md:gap-4 mb-4">
       <div class="rounded-xl overflow-hidden border border-slate-700">
         <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
-          <div class="text-sm font-semibold">🌌 NR2 — Länsi/etelä (herkin)</div>
+          <div class="text-sm font-semibold">🌌 NR2 — herkin</div>
           <a href="https://uk.jokkmokk.jp/detail_nr2.shtml" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
         </div>
         <img :src="jokkmokkNR2Url" class="w-full webcam-frame bg-slate-900" alt="Jokkmokk NR2">
@@ -222,132 +318,91 @@
       </div>
       <div class="rounded-xl overflow-hidden border border-slate-700">
         <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
-          <div class="text-sm font-semibold">🏞️ NR3 — Järvinäkymä länteen</div>
+          <div class="text-sm font-semibold">🏞️ NR3 — Järvinäkymä</div>
           <a href="https://uk.jokkmokk.jp/detail_nr3.shtml" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
         </div>
         <img :src="jokkmokkNR3Url" class="w-full webcam-frame bg-slate-900" alt="Jokkmokk NR3">
       </div>
       <div class="rounded-xl overflow-hidden border border-slate-700">
         <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
-          <div class="text-sm font-semibold">🌅 NR5 — Itä (lämpötila + revontulet)</div>
+          <div class="text-sm font-semibold">🌅 NR5 — Itä</div>
           <a href="https://uk.jokkmokk.jp/detail_nr5.shtml" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
         </div>
         <img :src="jokkmokkNR5Url" class="w-full webcam-frame bg-slate-900" alt="Jokkmokk NR5">
       </div>
     </div>
-
-    <!-- YouTube live streamit -->
-    <h3 class="text-sm font-semibold text-slate-300 mb-2 mt-4">🎥 Live-streameja Pohjoismaista (YouTube)</h3>
-    <div class="grid md:grid-cols-2 gap-3 md:gap-4 mb-4">
+    <h3 class="text-sm font-semibold text-slate-300 mb-2 mt-4">🎥 Live-streameja (YouTube)</h3>
+    <div class="grid md:grid-cols-2 gap-3 md:gap-4">
       <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
         <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
           <div class="text-sm font-semibold">Abisko Live Cam 1</div>
-          <a href="https://www.youtube.com/watch?v=rKfecmmzzw0" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ YouTube</a>
         </div>
         <iframe src="https://www.youtube.com/embed/rKfecmmzzw0" class="w-full webcam-frame" frameborder="0" allowfullscreen></iframe>
       </div>
       <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
         <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
           <div class="text-sm font-semibold">Abisko Live Cam 2</div>
-          <a href="https://www.youtube.com/watch?v=dyRSvHGGvA8" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ YouTube</a>
         </div>
         <iframe src="https://www.youtube.com/embed/dyRSvHGGvA8" class="w-full webcam-frame" frameborder="0" allowfullscreen></iframe>
       </div>
       <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
         <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
           <div class="text-sm font-semibold">Pohjoinen Norja Live</div>
-          <a href="https://www.youtube.com/watch?v=dnlQtDad6Dk" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ YouTube</a>
         </div>
         <iframe src="https://www.youtube.com/embed/dnlQtDad6Dk" class="w-full webcam-frame" frameborder="0" allowfullscreen></iframe>
       </div>
       <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
         <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
           <div class="text-sm font-semibold">🇮🇸 Islanti Live</div>
-          <a href="https://www.youtube.com/watch?v=ccTVAhJU5lg" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ YouTube</a>
         </div>
         <iframe src="https://www.youtube.com/embed/ccTVAhJU5lg" class="w-full webcam-frame" frameborder="0" allowfullscreen></iframe>
-      </div>
-    </div>
-
-    <h3 class="text-sm font-semibold text-slate-300 mb-2 mt-4">🇳🇴 Norja — Yr.no & Setermoen</h3>
-    <div class="grid md:grid-cols-2 gap-3 md:gap-4">
-      <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
-        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
-          <div class="text-sm font-semibold">Setermoen (Troms) säädata</div>
-          <a href="https://www.yr.no/en/other-conditions/1-291747/Norway/Troms/Bardu/Setermoen" target="_blank" class="text-xs text-emerald-400 hover:underline">↗ yr.no</a>
-        </div>
-        <div class="p-4 text-sm">
-          <div class="grid grid-cols-2 gap-2">
-            <div>📍 Sijainti</div><div class="font-mono">68.86°N, 18.35°E</div>
-            <div>🌡️ Lämpötila</div><div class="font-mono">+1.8°C</div>
-            <div>🌥️ Pilvisyys</div><div class="font-mono">97% (pilvistä)</div>
-            <div>📊 Kp-indeksi</div><div class="font-mono">3</div>
-            <div>🌌 Aurora</div><div class="font-mono text-emerald-400">Low activity (mutta live-kuvat näyttävät toisin!)</div>
-            <div>🌙 Kuu</div><div class="font-mono">9.3% (suosiollinen)</div>
-          </div>
-        </div>
-      </div>
-      <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
-        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between">
-          <div class="text-sm font-semibold">Abisko / Lights Over Lapland</div>
-          <a href="https://lightsoverlapland.com/aurora-webcam/" target="_blank" class="text-xs text-emerald-400 hover:underline">↗</a>
-        </div>
-        <iframe src="https://lightsoverlapland.com/aurora-webcam/" class="w-full webcam-frame" frameborder="0"></iframe>
       </div>
     </div>
   </section>
 
   <!-- Linkit -->
   <section class="glass rounded-2xl p-4 md:p-6">
-    <h2 class="text-base md:text-lg font-semibold mb-3 flex items-center">
-      <span class="mr-2">🔗</span> Tärkeät linkit
-    </h2>
+    <h2 class="text-base md:text-lg font-semibold mb-3">🔗 Tärkeät linkit</h2>
     <div class="grid md:grid-cols-2 gap-x-6 gap-y-1 text-xs md:text-sm">
-      <a href="https://www.ilmatieteenlaitos.fi/revontulet-ja-avaruussaa" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Ilmatieteen laitos — Revontulet ja avaruussää</a>
-      <a href="https://jemma.mobi/mittarit" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Jemma.mobi — DSCOVR + Kp</a>
-      <a href="https://www.sgo.fi/" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 SGO Sodankylä — Geofysiikan observatorio</a>
-      <a href="https://www.taivaanvahti.fi/observations/list/11573/" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Taivaanvahti — Revontulihavainnot</a>
-      <a href="http://www.ursa.fi/english.html" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Ursa — Tähtitieteellinen yhdistys</a>
-      <a href="https://uk.jokkmokk.jp/" target="_blank" class="hover:text-emerald-400 hover:underline">🇸🇪 Jokkmokk Porjus — Live revontulikamerat</a>
-      <a href="https://www.irf.se/" target="_blank" class="hover:text-emerald-400 hover:underline">🇸🇪 IRF Kiruna — Rymdfysik</a>
-      <a href="https://www.yr.no/en/other-conditions/1-291747/Norway/Troms/Bardu/Setermoen" target="_blank" class="hover:text-emerald-400 hover:underline">🇳🇴 Yr.no Setermoen — Sää ja aurora</a>
-      <a href="https://www.spaceweatherlive.com/en/auroral-activity/aurora-forecast.html" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 SpaceWeatherLive — Kp-ennuste</a>
-      <a href="https://services.swpc.noaa.gov/json/planetary_k_index_1m.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA Kp-data (JSON)</a>
-      <a href="https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA DSCOVR IMF (JSON)</a>
-      <a href="https://services.swpc.noaa.gov/products/noaa-scales.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA R/S/G-asteikot</a>
+      <a href="https://www.ilmatieteenlaitos.fi/revontulet-ja-avaruussaa" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Ilmatieteen laitos</a>
+      <a href="https://jemma.mobi/mittarit" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Jemma.mobi</a>
+      <a href="https://www.sgo.fi/" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 SGO Sodankylä</a>
+      <a href="https://www.taivaanvahti.fi/observations/list/11573/" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Taivaanvahti</a>
+      <a href="http://www.ursa.fi/english.html" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 Ursa</a>
+      <a href="https://uk.jokkmokk.jp/" target="_blank" class="hover:text-emerald-400 hover:underline">🇸🇪 Jokkmokk Porjus</a>
+      <a href="https://www.irf.se/" target="_blank" class="hover:text-emerald-400 hover:underline">🇸🇪 IRF Kiruna</a>
+      <a href="https://www.yr.no/en/other-conditions/1-291747/Norway/Troms/Bardu/Setermoen" target="_blank" class="hover:text-emerald-400 hover:underline">🇳🇴 Yr.no Setermoen</a>
+      <a href="https://www.spaceweatherlive.com/en/auroral-activity/aurora-forecast.html" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 SpaceWeatherLive</a>
+      <a href="https://services.swpc.noaa.gov/json/planetary_k_index_1m.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA Kp-data</a>
+      <a href="https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json" target="_blank" class="hover:text-emerald-400 hover:underline">🌍 NOAA DSCOVR IMF</a>
+      <a href="https://opendata.fmi.fi/wfs" target="_blank" class="hover:text-emerald-400 hover:underline">🇫🇮 FMI avoin data</a>
     </div>
   </section>
 
-  <!-- Footer -->
   <footer class="text-center text-slate-500 text-xs py-4">
-    <div>Tietolähteet: SWPC · Jemma.mobi · IRF Kiruna · Jokkmokk · yr.no · SGO Sodankylä</div>
-    <div class="mt-1">Päivittyy automaattisesti 60s välein • Ei tallenna käyttäjädataa • v2.0 — korjattu kamerat</div>
+    <div>Tietolähteet: SWPC · Jemma.mobi · IRF Kiruna · Jokkmokk · FMI · yr.no · SGO</div>
+    <div class="mt-1">v3.0 — GPS-sijainti &amp; henkilökohtaiset ennusteet • Päivittyy automaattisesti 60s välein</div>
   </footer>
-
 </div>
 
 <script>
 function dashboard() {
   return {
-    // Kp + perusdata
-    kp: null,
-    kpDisplay: '—',
-    kpStatusText: 'Ladataan...',
-    forecasts: [
-      { label: '+3h', kp: null, time: '' },
-      { label: '+6h', kp: null, time: '' },
-      { label: '+12h', kp: null, time: '' },
-      { label: '+24h', kp: null, time: '' }
-    ],
+    // Tila
+    kp: null, kpDisplay: '—', kpStatusText: 'Ladataan...',
+    forecasts: [{ label: '+3h', kp: null, time: '' },{ label: '+6h', kp: null, time: '' },{ label: '+12h', kp: null, time: '' },{ label: '+24h', kp: null, time: '' }],
     noaaScale: { R: '—', S: '—', G: '—' },
     lastUpdate: '—',
 
-    // DSCOVR data
-    bz: null,
-    bt: null,
-    speed: null,
-    density: null,
-    hp: null,
+    // DSCOVR
+    bz: null, bt: null, speed: null, density: null, hp: null,
+
+    // GPS-sijainti
+    lat: null, lon: null, hasLocation: false, locationName: '',
+    gpsLoading: false, gpsError: '',
+    manualLat: '', manualLon: '',
+    magLat: 0, kpThreshold: 99, magMidnight: '',
+    fmiData: null,
 
     // Alueet
     regions: [
@@ -358,12 +413,285 @@ function dashboard() {
       { id: 'south', name: 'Etelä-Suomi', cities: 'Helsinki, Turku', threshold: 6 }
     ],
 
+    init() {
+      // Yritä ladata tallennettu sijainti localStoragesta
+      const saved = localStorage.getItem('aurora-location');
+      if (saved) {
+        try {
+          const loc = JSON.parse(saved);
+          this.lat = loc.lat;
+          this.lon = loc.lon;
+          this.locationName = loc.name || '';
+          this.hasLocation = true;
+          this.updateLocationCalculations();
+          this.fetchFMI();
+        } catch(e) { console.error(e); }
+      }
+
+      Promise.all([
+        this.fetchKp(),
+        this.fetchForecast(),
+        this.fetchScales(),
+        this.fetchDscovr()
+      ]);
+
+      setInterval(() => this.fetchKp(), 60000);
+      setInterval(() => this.fetchDscovr(), 60000);
+      setInterval(() => this.fetchScales(), 900000);
+      setInterval(() => this.fetchForecast(), 900000);
+      if (this.hasLocation) {
+        setInterval(() => this.fetchFMI(), 600000); // 10 min
+      }
+
+      // Päivitetään magneettinen keskiyö countdown
+      setInterval(() => this.updateMagCountdown(), 60000);
+    },
+
+    // GPS
+    requestGPS() {
+      this.gpsLoading = true;
+      this.gpsError = '';
+      if (!navigator.geolocation) {
+        this.gpsError = 'Selain ei tue GPS:ää';
+        this.gpsLoading = false;
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          this.lat = pos.coords.latitude;
+          this.lon = pos.coords.longitude;
+          this.locationName = `GPS-sijainti (±${Math.round(pos.coords.accuracy)}m)`;
+          this.hasLocation = true;
+          this.gpsLoading = false;
+          this.saveLocation();
+          this.updateLocationCalculations();
+          this.fetchFMI();
+        },
+        (err) => {
+          this.gpsError = `GPS-virhe: ${err.message}. Syötä koordinaatit käsin.`;
+          this.gpsLoading = false;
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      );
+    },
+
+    setManualLocation() {
+      const lat = parseFloat(this.manualLat);
+      const lon = parseFloat(this.manualLon);
+      if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        this.gpsError = 'Virheelliset koordinaatit';
+        return;
+      }
+      this.lat = lat;
+      this.lon = lon;
+      this.locationName = `Manuaalinen: ${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+      this.hasLocation = true;
+      this.gpsError = '';
+      this.saveLocation();
+      this.updateLocationCalculations();
+      this.fetchFMI();
+    },
+
+    setPreset(value) {
+      if (!value) return;
+      const [lat, lon] = value.split(',').map(parseFloat);
+      this.manualLat = lat;
+      this.manualLon = lon;
+      this.setManualLocation();
+    },
+
+    clearLocation() {
+      this.hasLocation = false;
+      this.lat = null;
+      this.lon = null;
+      this.manualLat = '';
+      this.manualLon = '';
+      this.fmiData = null;
+      localStorage.removeItem('aurora-location');
+    },
+
+    saveLocation() {
+      localStorage.setItem('aurora-location', JSON.stringify({
+        lat: this.lat, lon: this.lon, name: this.locationName
+      }));
+    },
+
+    updateLocationCalculations() {
+      if (!this.hasLocation) return;
+      // Geomagneettinen lat: Suomessa noin 11° suurempi kuin maantieteellinen
+      // Tarkempi kaava: mag_lat ≈ lat + 11 (Suomessa)
+      this.magLat = this.lat + 11;
+
+      // Kp-kynnys perustunut geomagneettiseen leveyteen
+      // Suomi: magLat 67°+ → Kp 0-1, 64-67 → 1-2, jne.
+      if (this.magLat >= 67) this.kpThreshold = 0.5;
+      else if (this.magLat >= 65) this.kpThreshold = 1.5;
+      else if (this.magLat >= 63) this.kpThreshold = 2.5;
+      else if (this.magLat >= 60) this.kpThreshold = 3.5;
+      else if (this.magLat >= 57) this.kpThreshold = 4.5;
+      else if (this.magLat >= 54) this.kpThreshold = 5.5;
+      else this.kpThreshold = 6.5;
+
+      // Magneettinen keskiyö: noin 22-01 paikallista aikaa
+      // Tarkemmin: MLT ≈ UTC + (lon - geomag_lon) / 15
+      // Suomessa geomag_lon ≈ 102°E
+      // MLT_midnight ≈ UTC - lon/15 + 102/15 + 12h
+      // Yksinkertaistus: Suomessa magneettinen keskiyö = noin (lon - 25)/15 + 0
+      const magMidnightHour = ((this.lon - 102) / 15) % 24;
+      const normalizedHour = magMidnightHour < 0 ? magMidnightHour + 24 : magMidnightHour;
+      const hh = Math.floor(normalizedHour);
+      const mm = Math.round((normalizedHour - hh) * 60);
+      this.magMidnight = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+    },
+
+    updateMagCountdown() {
+      // Päivitetään UI
+      this.magMidnightCountdown;
+    },
+
+    get magMidnightFormatted() {
+      if (!this.magMidnight) return '—';
+      const now = new Date();
+      const [h, m] = this.magMidnight.split(':').map(Number);
+      const magToday = new Date();
+      magToday.setHours(h, m, 0, 0);
+      if (magToday < now) magToday.setDate(magToday.getDate() + 1);
+      const diff = magToday - now;
+      const hours = Math.floor(diff / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
+      return `${this.magMidnight}`;
+    },
+
+    get magMidnightCountdown() {
+      if (!this.magMidnight) return '—';
+      const now = new Date();
+      const [h, m] = this.magMidnight.split(':').map(Number);
+      const magToday = new Date();
+      magToday.setHours(h, m, 0, 0);
+      if (magToday < now) magToday.setDate(magToday.getDate() + 1);
+      const diff = magToday - now;
+      const hours = Math.floor(diff / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
+      if (hours === 0) return `Seuraavaan ${mins} min — PARAS HETKI`;
+      return `${hours}h ${mins}min seuraavaan magneettiseen keskiyöhön`;
+    },
+
+    get sunInfo() {
+      if (!this.hasLocation) return '—';
+      const now = new Date();
+      const lat = this.lat;
+      const lon = this.lon;
+      // Auringon korkeus (yksinkertaistus)
+      const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+      const decl = -23.45 * Math.cos(2 * Math.PI * (dayOfYear + 10) / 365);
+      const hourAngle = (now.getUTCHours() + now.getUTCMinutes()/60 + lon/15 - 12) * 15;
+      const altRad = Math.asin(Math.sin(lat * Math.PI / 180) * Math.sin(decl * Math.PI / 180) +
+                                 Math.cos(lat * Math.PI / 180) * Math.cos(decl * Math.PI / 180) * Math.cos(hourAngle * Math.PI / 180));
+      const alt = altRad * 180 / Math.PI;
+      if (alt > 0) return `${alt.toFixed(0)}° (päivä)`;
+      if (alt > -6) return '🌅 Hämärä';
+      if (alt > -12) return '🌌 Naut. hämärä';
+      return `🌑 ${alt.toFixed(0)}° (yö)`;
+    },
+
+    // Henkilökohtainen arvio
+    get myVisibilityClass() {
+      if (!this.hasLocation || this.kp === null) return 'bg-slate-800 text-slate-400';
+      const t = this.kpThreshold;
+      if (this.kp >= t + 2) return 'kp-quiet text-white';
+      if (this.kp >= t) return 'kp-unsettled text-white';
+      if (this.kp >= t - 1) return 'bg-slate-600 text-slate-200';
+      return 'bg-slate-800 text-slate-500';
+    },
+
+    get myVisibilityText() {
+      if (!this.hasLocation || this.kp === null) return 'Odota sijaintia...';
+      const t = this.kpThreshold;
+      if (this.kp >= t + 2) return `✅✅ SUURI MAHDOLLISUUS (Kp ylittää ${t.toFixed(1)}+2)`;
+      if (this.kp >= t) return `✅ MAHDOLLINEN (Kp ≥ ${t.toFixed(1)})`;
+      if (this.kp >= t - 1) return `⚠️ HEIKKO MAHDOLLISUUS`;
+      return `❌ EI MAHDOLLISUUTTA (tarvitaan Kp ≥ ${t.toFixed(1)})`;
+    },
+
+    get myVisibilityEmoji() {
+      if (!this.hasLocation || this.kp === null) return '📍';
+      const t = this.kpThreshold;
+      if (this.kp >= t + 2) return '🌌🌌';
+      if (this.kp >= t) return '🌌';
+      if (this.kp >= t - 1) return '🌠';
+      return '🌑';
+    },
+
+    get myVisibilityAdvice() {
+      if (!this.hasLocation || this.kp === null) return '';
+      const cloudCover = this.fmiData?.cloudCover;
+      let advice = '';
+      if (this.kp >= this.kpThreshold) {
+        advice = `Revontulet voivat näkyä sijainnissasi. Katso pohjoiseen. `;
+        if (cloudCover !== null && cloudCover < 30) advice += '☀️ Pilvetön taivas — erinomainen!';
+        else if (cloudCover !== null && cloudCover < 70) advice += '⛅ Jonkin verran pilviä — odota selkeämpää hetkeä.';
+        else if (cloudCover !== null) advice += '☁️ Pilvistä — revontulet eivät näy.';
+        else advice += 'Säädata ei saatavilla.';
+      } else {
+        advice = `Tarvitaan Kp ≥ ${this.kpThreshold.toFixed(1)}. Seuraa perjantain CME-myrskyä.`;
+      }
+      return advice;
+    },
+
+    // FMI
+    async fetchFMI() {
+      if (!this.hasLocation) return;
+      try {
+        // FMI WFS stored query for point forecast
+        const url = `https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature&storedqueryid=fmi::forecast::cloudiness::point::simple&latlon=${this.lat},${this.lon}&parameters=cloudiness,temperature,windSpeed`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const text = await r.text();
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, 'application/xml');
+        // Etsi tuoreittain arvot
+        const wml = xml.querySelectorAll('wml2:MeasurementTimeseries, MeasurementTimeseries');
+        const data = { cloudCover: null, temperature: null, windSpeed: null };
+        let latest = null;
+        wml.forEach(ts => {
+          const param = ts.querySelector('wml2:ParameterName, ParameterName')?.textContent;
+          const values = ts.querySelectorAll('wml2:MeasurementTVP, MeasurementTVP, wml2:value, value');
+          if (values.length > 0) {
+            const last = values[values.length - 1];
+            const v = parseFloat(last.querySelector('wml2:value, value')?.textContent);
+            const time = last.querySelector('wml2:time, time')?.textContent;
+            if (!latest || time > latest) latest = time;
+            if (!isNaN(v)) {
+              if (param === 'cloudiness') data.cloudCover = v;
+              else if (param === 'temperature') data.temperature = v - 273.15; // K → °C
+              else if (param === 'windSpeed') data.windSpeed = v;
+            }
+          }
+        });
+        this.fmiData = data;
+      } catch (e) {
+        console.warn('FMI:', e.message);
+        this.fmiData = null;
+      }
+    },
+
     // Computed URLs
     get ruka3Url() { return `https://ruka3.panocloud.webcam/raw_panorama1.tiles/preview.jpg?t=${Date.now()}`; },
     get jokkmokkNRAUrl() { return `https://uk.jokkmokk.jp/photo/nra/latest.jpg?t=${Date.now()}`; },
     get jokkmokkNR2Url() { return `https://uk.jokkmokk.jp/photo/nr2/latest.jpg?t=${Date.now()}`; },
     get jokkmokkNR3Url() { return `https://uk.jokkmokk.jp/photo/nr3/latest.jpg?t=${Date.now()}`; },
     get jokkmokkNR5Url() { return `https://uk.jokkmokk.jp/photo/nr5/latest.jpg?t=${Date.now()}`; },
+
+    formatLat(lat) {
+      if (lat === null) return '—';
+      const ns = lat >= 0 ? 'N' : 'S';
+      return `${Math.abs(lat).toFixed(3)}° ${ns}`;
+    },
+    formatLon(lon) {
+      if (lon === null) return '—';
+      const ew = lon >= 0 ? 'E' : 'W';
+      return `${Math.abs(lon).toFixed(3)}° ${ew}`;
+    },
 
     // DSCOVR display
     get bzDisplay() { return this.bz !== null ? this.bz.toFixed(1) : '—'; },
@@ -384,7 +712,6 @@ function dashboard() {
       return '↔️ Neutraali';
     },
 
-    // Kp
     get kpColorClass() {
       if (this.kp === null) return 'bg-slate-800';
       if (this.kp < 3) return 'kp-quiet';
@@ -393,42 +720,13 @@ function dashboard() {
       return 'kp-storm';
     },
 
-    // NOAA scales
-    get rColorClass() {
-      const r = parseInt(this.noaaScale.R) || 0;
-      if (r >= 3) return 'kp-storm';
-      if (r >= 2) return 'kp-active';
-      if (r >= 1) return 'kp-unsettled';
-      return 'kp-quiet';
-    },
-    get sColorClass() {
-      const s = parseInt(this.noaaScale.S) || 0;
-      if (s >= 3) return 'kp-storm';
-      if (s >= 2) return 'kp-active';
-      if (s >= 1) return 'kp-unsettled';
-      return 'kp-quiet';
-    },
-    get gColorClass() {
-      const g = parseInt(this.noaaScale.G) || 0;
-      if (g >= 3) return 'kp-storm';
-      if (g >= 2) return 'kp-active';
-      if (g >= 1) return 'kp-unsettled';
-      return 'kp-quiet';
-    },
-    get rText() {
-      const texts = ['Ei häiriöitä', 'Pieni (R1)', 'Kohtalainen (R2)', 'Suuri (R3)', 'Vaikea (R4)', 'Äärimmäinen (R5)'];
-      return texts[parseInt(this.noaaScale.R) || 0];
-    },
-    get sText() {
-      const texts = ['Ei häiriöitä', 'Pieni (S1)', 'Kohtalainen (S2)', 'Suuri (S3)', 'Vaikea (S4)', 'Äärimmäinen (S5)'];
-      return texts[parseInt(this.noaaScale.S) || 0];
-    },
-    get gText() {
-      const texts = ['Ei myrskyä', 'Pieni (G1)', 'Kohtalainen (G2)', 'Suuri (G3)', 'Vaikea (G4)', 'Äärimmäinen (G5)'];
-      return texts[parseInt(this.noaaScale.G) || 0];
-    },
+    get rColorClass() { const r = parseInt(this.noaaScale.R) || 0; return r >= 3 ? 'kp-storm' : r >= 2 ? 'kp-active' : r >= 1 ? 'kp-unsettled' : 'kp-quiet'; },
+    get sColorClass() { const s = parseInt(this.noaaScale.S) || 0; return s >= 3 ? 'kp-storm' : s >= 2 ? 'kp-active' : s >= 1 ? 'kp-unsettled' : 'kp-quiet'; },
+    get gColorClass() { const g = parseInt(this.noaaScale.G) || 0; return g >= 3 ? 'kp-storm' : g >= 2 ? 'kp-active' : g >= 1 ? 'kp-unsettled' : 'kp-quiet'; },
+    get rText() { const texts = ['Ei häiriöitä', 'Pieni (R1)', 'Kohtalainen (R2)', 'Suuri (R3)', 'Vaikea (R4)', 'Äärimmäinen (R5)']; return texts[parseInt(this.noaaScale.R) || 0]; },
+    get sText() { const texts = ['Ei häiriöitä', 'Pieni (S1)', 'Kohtalainen (S2)', 'Suuri (S3)', 'Vaikea (S4)', 'Äärimmäinen (S5)']; return texts[parseInt(this.noaaScale.S) || 0]; },
+    get gText() { const texts = ['Ei myrskyä', 'Pieni (G1)', 'Kohtalainen (G2)', 'Suuri (G3)', 'Vaikea (G4)', 'Äärimmäinen (G5)']; return texts[parseInt(this.noaaScale.G) || 0]; },
 
-    // Mahdollisuus
     chanceClass(regionId) {
       const region = this.regions.find(r => r.id === regionId);
       if (!region || this.kp === null) return 'bg-slate-700 text-slate-400';
@@ -448,7 +746,6 @@ function dashboard() {
       return '❌ EI MAHDOLLISUUTTA';
     },
 
-    // Ennusteet
     forecastColorClass(kp) {
       if (kp === null) return 'bg-slate-800';
       if (kp < 3) return 'kp-quiet';
@@ -467,20 +764,6 @@ function dashboard() {
       return 'Äärimmäinen myrsky';
     },
 
-    // INIT
-    async init() {
-      await Promise.all([
-        this.fetchKp(),
-        this.fetchForecast(),
-        this.fetchScales(),
-        this.fetchDscovr()
-      ]);
-      setInterval(() => this.fetchKp(), 60000);
-      setInterval(() => this.fetchDscovr(), 60000);
-      setInterval(() => this.fetchScales(), 900000);
-      setInterval(() => this.fetchForecast(), 900000);
-    },
-
     async fetchKp() {
       try {
         const r = await fetch('https://services.swpc.noaa.gov/json/planetary_k_index_1m.json');
@@ -492,9 +775,7 @@ function dashboard() {
         this.kpDisplay = this.kp.toFixed(1);
         this.kpStatusText = this.forecastStatus(this.kp);
         this.lastUpdate = new Date().toLocaleTimeString('fi-FI');
-      } catch (e) {
-        console.error('Kp:', e);
-      }
+      } catch (e) { console.error('Kp:', e); }
     },
 
     async fetchDscovr() {
@@ -502,21 +783,17 @@ function dashboard() {
         const r = await fetch('https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json');
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
-        // Data on lista objekteja, joissa on bz_gsm, bt, density, speed
         const valid = data.filter(d => d.bz_gsm !== null && d.bt !== null && d.active);
         if (valid.length === 0) throw new Error('No valid DSCOVR data');
         const latest = valid[valid.length - 1];
         this.bz = parseFloat(latest.bz_gsm);
         this.bt = parseFloat(latest.bt);
-        // Nopeus ja tiheal toisessa endpointissa, defaultataan jos ei saatavilla
-        // Haetaan plasma eri kutsulla
         try {
           const pr = await fetch('https://services.swpc.noaa.gov/products/solar-wind/plasma-2-hour.json');
           if (pr.ok) {
             const pdata = await pr.json();
             if (pdata.length > 1) {
               const latestP = pdata[pdata.length - 1];
-              // Ets plasma-nopeus ja tiheal
               const header = pdata[0];
               const speedIdx = header.indexOf('speed');
               const denIdx = header.indexOf('density');
@@ -525,17 +802,12 @@ function dashboard() {
             }
           }
         } catch (pe) { console.warn('Plasma:', pe); }
-
-        // HP30 likimain: Boylen indeksi perusteella
-        // Phi = 10^-4 * ν^2 + 11.7 * B * sin^3(θ/2)
         if (this.speed && this.bt && this.bz !== null) {
           const theta = Math.acos(Math.abs(this.bz) / this.bt) * 180 / Math.PI;
           const phi = 0.0001 * this.speed * this.speed + 11.7 * this.bt * Math.pow(Math.sin(theta * Math.PI / 360), 3);
-          this.hp = Math.max(0, phi * 0.6); // karkea approksimaatio
+          this.hp = Math.max(0, phi * 0.6);
         }
-      } catch (e) {
-        console.error('DSCOVR:', e);
-      }
+      } catch (e) { console.error('DSCOVR:', e); }
     },
 
     async fetchForecast() {
@@ -559,9 +831,7 @@ function dashboard() {
             time: forecastTime.toLocaleString('fi-FI', { weekday: 'short', hour: '2-digit', minute: '2-digit' })
           };
         });
-      } catch (e) {
-        console.error('Forecast:', e);
-      }
+      } catch (e) { console.error('Forecast:', e); }
     },
 
     nearestForecast(data, targetTime) {
@@ -586,9 +856,7 @@ function dashboard() {
           S: current.S.Scale || '0',
           G: current.G.Scale || '0'
         };
-      } catch (e) {
-        console.error('Scales:', e);
-      }
+      } catch (e) { console.error('Scales:', e); }
     }
   };
 }

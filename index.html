@@ -820,7 +820,7 @@ function dashboard() {
         const r = await fetch('https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json');
         if (!r.ok) throw new Error();
         const data = await r.json();
-        const valid = [d for d in data.filter(d => d.bz_gsm !== null && d.bt !== null && d.active)];
+        const valid = data.filter(d => d.bz_gsm !== null && d.bt !== null && d.active);
         if (valid.length === 0) throw new Error();
         const latest = valid[valid.length - 1];
         this.bz = parseFloat(latest.bz_gsm);
